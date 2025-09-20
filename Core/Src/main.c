@@ -366,6 +366,7 @@ void SDRAM_FullTest2(void)
 }
 
 
+extern void run_memory_benchmarks(void);
 
 /* USER CODE END 0 */
 
@@ -377,6 +378,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+
 
   /* USER CODE END 1 */
 
@@ -432,7 +434,8 @@ int main(void)
   }
   //sdram_memtest();
   //SDRAM_FullTest();
-  SDRAM_FullTest2();
+  //SDRAM_FullTest2();
+  run_memory_benchmarks();
 
 
   /* USER CODE END 2 */
