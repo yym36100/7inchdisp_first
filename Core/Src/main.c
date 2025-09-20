@@ -177,6 +177,196 @@ int sdram_memtest(void)
     }
 }
 
+
+#define SDRAM_BASE_ADDR 0xC0000000
+#undef SDRAM_SIZE
+#define SDRAM_SIZE      (32*1024*1024) // 32 MB
+#define SDRAM_WORDS     (SDRAM_SIZE / 4)
+
+typedef enum {
+    TEST_PATTERN_FIXED,
+    TEST_PATTERN_WALKING_ONES,
+    TEST_PATTERN_WALKING_ZEROS,
+    TEST_PATTERN_ALTERNATING,
+    TEST_PATTERN_RANDOM
+} TestPattern;
+
+static inline uint32_t prng(uint32_t *state) {
+    // simple 32-bit LCG pseudo-random generator
+    *state = *state * 1664525 + 1013904223;
+    return *state;
+}
+
+// Perform one pass with a single pattern
+int SDRAM_Test_Pattern(uint32_t *mem, TestPattern pattern)
+{
+    uint32_t state = 0x12345678;
+    uint32_t write_val = 0;
+
+    for(uint32_t i = 0; i < SDRAM_WORDS; i++)
+    {
+        switch(pattern)
+        {
+            case TEST_PATTERN_FIXED: write_val = 0xA5A5A5A5; break;
+            case TEST_PATTERN_WALKING_ONES: write_val = 1U << (i % 32); break;
+            case TEST_PATTERN_WALKING_ZEROS: write_val = ~(1U << (i % 32)); break;
+            case TEST_PATTERN_ALTERNATING: write_val = (i % 2) ? 0xAAAAAAAA : 0x55555555; break;
+            case TEST_PATTERN_RANDOM: write_val = prng(&state); break;
+        }
+        mem[i] = write_val;
+    }
+
+    // Ensure all writes are visible in D-Cache
+    SCB_CleanDCache_by_Addr((uint32_t*)mem, SDRAM_SIZE);
+    state = 0x12345678;
+
+    for(uint32_t i = 0; i < SDRAM_WORDS; i++)
+    {
+        switch(pattern)
+        {
+            case TEST_PATTERN_FIXED: write_val = 0xA5A5A5A5; break;
+            case TEST_PATTERN_WALKING_ONES: write_val = 1U << (i % 32); break;
+            case TEST_PATTERN_WALKING_ZEROS: write_val = ~(1U << (i % 32)); break;
+            case TEST_PATTERN_ALTERNATING: write_val = (i % 2) ? 0xAAAAAAAA : 0x55555555; break;
+            case TEST_PATTERN_RANDOM: write_val = prng(&state); break;
+        }
+        uint32_t read_val = mem[i];
+        SCB_InvalidateDCache_by_Addr((uint32_t*)&mem[i], 4);
+        if(read_val != write_val)
+        {
+            return i; // first failing index
+        }
+    }
+
+    return -1; // passed
+}
+
+// Full SDRAM memory test with multiple patterns
+void SDRAM_FullTest(void)
+{
+    uint32_t *mem = (uint32_t*)SDRAM_BASE_ADDR;
+    int res;
+
+    TestPattern patterns[] = {
+        TEST_PATTERN_FIXED,
+        TEST_PATTERN_WALKING_ONES,
+        TEST_PATTERN_WALKING_ZEROS,
+        TEST_PATTERN_ALTERNATING,
+        TEST_PATTERN_RANDOM
+    };
+
+    for(int p = 0; p < sizeof(patterns)/sizeof(patterns[0]); p++)
+    {
+        res = SDRAM_Test_Pattern(mem, patterns[p]);
+        if(res < 0)
+            printf("Pattern %d passed\n", p);
+        else
+            printf("Pattern %d failed at address 0x%08X\n", p, SDRAM_BASE_ADDR + res*4);
+    }
+}
+
+
+
+typedef enum {
+    PATTERN_FIXED,
+    PATTERN_WALKING_ONES,
+    PATTERN_WALKING_ZEROS,
+    PATTERN_ALTERNATING,
+    PATTERN_RANDOM
+} TestPattern2;
+
+typedef enum {
+    ACCESS_8BIT=8,
+    ACCESS_16BIT=16,
+    ACCESS_32BIT=32
+} AccessSize;
+
+
+// Fill SDRAM with a pattern
+void SDRAM_Fill(uint32_t base, TestPattern2 pattern, AccessSize size, uint32_t seed)
+{
+    uint32_t state = seed;
+    for(uint32_t offset = 0; offset < SDRAM_SIZE; offset += (size/8))
+    {
+        uint32_t val = 0;
+        switch(pattern)
+        {
+            case PATTERN_FIXED: val = 0xA5A5A5A5; break;
+            case PATTERN_WALKING_ONES: val = 1U << ((offset/size*8) % 32); break;
+            case PATTERN_WALKING_ZEROS: val = ~(1U << ((offset/size*8) % 32)); break;
+            case PATTERN_ALTERNATING: val = ((offset/(size/8)) %2) ? 0xAAAAAAAA : 0x55555555; break;
+            case PATTERN_RANDOM: val = prng(&state); break;
+        }
+
+        switch(size)
+        {
+            case ACCESS_8BIT:  *((volatile uint8_t *)(base + offset)) = (uint8_t)val; break;
+            case ACCESS_16BIT: *((volatile uint16_t*)(base + offset)) = (uint16_t)val; break;
+            case ACCESS_32BIT: *((volatile uint32_t*)(base + offset)) = val; break;
+        }
+    }
+
+    // Ensure all writes hit SDRAM
+    SCB_CleanDCache_by_Addr((uint32_t*)base, SDRAM_SIZE);
+}
+
+// Verify SDRAM pattern
+int SDRAM_Verify(uint32_t base, TestPattern2 pattern, AccessSize size, uint32_t seed)
+{
+    uint32_t state = seed;
+    for(uint32_t offset = 0; offset < SDRAM_SIZE; offset += (size/8))
+    {
+        uint32_t expected = 0;
+        switch(pattern)
+        {
+            case PATTERN_FIXED: expected = 0xA5A5A5A5; break;
+            case PATTERN_WALKING_ONES: expected = 1U << ((offset/size*8) % 32); break;
+            case PATTERN_WALKING_ZEROS: expected = ~(1U << ((offset/size*8) % 32)); break;
+            case PATTERN_ALTERNATING: expected = ((offset/(size/8)) %2) ? 0xAAAAAAAA : 0x55555555; break;
+            case PATTERN_RANDOM: expected = prng(&state); break;
+        }
+
+        uint32_t read_val = 0;
+        switch(size)
+        {
+            case ACCESS_8BIT:  read_val = *((volatile uint8_t *)(base + offset)); break;
+            case ACCESS_16BIT: read_val = *((volatile uint16_t*)(base + offset)); break;
+            case ACCESS_32BIT: read_val = *((volatile uint32_t*)(base + offset)); break;
+        }
+
+        SCB_InvalidateDCache_by_Addr((uint32_t*)(base + offset), size/8);
+
+        if(read_val != (expected & ((1UL<<size)-1)))
+        {
+            return offset; // first failing address
+        }
+    }
+    return -1; // passed
+}
+
+// Run full SDRAM test
+void SDRAM_FullTest2(void)
+{
+    TestPattern2 patterns[] = {PATTERN_FIXED, PATTERN_WALKING_ONES, PATTERN_WALKING_ZEROS, PATTERN_ALTERNATING, PATTERN_RANDOM};
+    AccessSize sizes[] = {ACCESS_8BIT, ACCESS_16BIT, ACCESS_32BIT};
+    uint32_t seed = 0x12345678;
+
+    for(int p=0; p<sizeof(patterns)/sizeof(patterns[0]); p++)
+    {
+        for(int s=0; s<sizeof(sizes)/sizeof(sizes[0]); s++)
+        {
+            SDRAM_Fill(SDRAM_BASE_ADDR, patterns[p], sizes[s], seed);
+            int fail = SDRAM_Verify(SDRAM_BASE_ADDR, patterns[p], sizes[s], seed);
+            if(fail < 0)
+                printf("Pattern %d, Access %d-bit: PASS\n", p, (s==0?8:(s==1?16:32)));
+            else
+                printf("Pattern %d, Access %d-bit: FAIL at 0x%08X\n", p, (s==0?8:(s==1?16:32)), SDRAM_BASE_ADDR+fail);
+        }
+    }
+}
+
+
+
 /* USER CODE END 0 */
 
 /**
@@ -234,13 +424,15 @@ int main(void)
 	      p[i] = 0xA5A5A5A5;      // write pattern
 	      if(p[i] != 0xA5A5A5A5) {
 	          // report fault, address = &p[i]
-	    	  printf("fault at %08x:04x\n",&p[i],p[i]);
+	    	  printf("fault at %08x:%04x\n",&p[i],p[i]);
 	          break;
 	      }
 	  }
 
   }
-  sdram_memtest();
+  //sdram_memtest();
+  //SDRAM_FullTest();
+  SDRAM_FullTest2();
 
 
   /* USER CODE END 2 */
