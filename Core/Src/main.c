@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,6 +43,8 @@
 
 UART_HandleTypeDef huart1;
 
+SDRAM_HandleTypeDef hsdram1;
+
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -52,12 +54,128 @@ void SystemClock_Config(void);
 static void MPU_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_FMC_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void sdram_init(void){
+	FMC_SDRAM_CommandTypeDef command;
+
+	// Step 1: Enable clock
+	command.CommandMode = FMC_SDRAM_CMD_CLK_ENABLE;
+	command.CommandTarget = FMC_SDRAM_CMD_TARGET_BANK1;
+	command.AutoRefreshNumber = 1;
+	command.ModeRegisterDefinition = 0;
+	HAL_SDRAM_SendCommand(&hsdram1, &command, 0x1000);
+	HAL_Delay(1); // >100 µs
+
+	// Step 2: Precharge all
+	command.CommandMode = FMC_SDRAM_CMD_PALL;
+	HAL_SDRAM_SendCommand(&hsdram1, &command, 0x1000);
+
+	// Step 3: Auto-refresh (2 cycles)
+	command.CommandMode = FMC_SDRAM_CMD_AUTOREFRESH_MODE;
+	command.AutoRefreshNumber = 2;
+	HAL_SDRAM_SendCommand(&hsdram1, &command, 0x1000);
+
+	// Step 4: Load Mode Register
+	uint32_t mode_reg = 0
+	  | (0x0 << 0)  // Burst Length = 1
+	  | (0x0 << 3)  // Burst Type = Sequential
+	  | (0x3 << 4)  // CAS Latency = 3
+	  | (0x0 << 7)  // Standard Operation
+	  | (0x1 << 9); // Write burst = Single
+
+	command.CommandMode = FMC_SDRAM_CMD_LOAD_MODE;
+	command.ModeRegisterDefinition = mode_reg;
+	HAL_SDRAM_SendCommand(&hsdram1, &command, 0x1000);
+
+	// Step 5: Set refresh rate
+	HAL_SDRAM_ProgramRefreshRate(&hsdram1, 780);
+
+}
+
+int __io_putchar(int ch)
+{
+    HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+    return ch;
+}
+
+
+#define SDRAM_START ((uint32_t)0xC0000000)   // SDRAM Bank1 base
+#define SDRAM_SIZE  ((uint32_t)0x02000000)   // 32 MB for W9825G6KH (16M x16)
+#define SDRAM_END   (SDRAM_START + SDRAM_SIZE)
+
+static inline uint32_t *sdram_ptr(uint32_t offset) {
+    return (uint32_t *)(SDRAM_START + offset);
+}
+
+int sdram_memtest(void)
+{
+    uint32_t errors = 0;
+    uint32_t addr;
+    uint32_t readback;
+
+    printf("SDRAM test: 0x%08lX .. 0x%08lX\n", (unsigned long)SDRAM_START, (unsigned long)SDRAM_END-1);
+
+    // 1. Walking bit test
+    for (uint32_t bit = 0; bit < 32; bit++) {
+        uint32_t pattern = 1UL << bit;
+        *sdram_ptr(0) = pattern;
+        readback = *sdram_ptr(0);
+        if (readback != pattern) {
+            printf("Walking bit error at bit %lu: wrote 0x%08lX, read 0x%08lX\n",
+                   (unsigned long)bit, (unsigned long)pattern, (unsigned long)readback);
+            errors++;
+        }
+    }
+
+    // 2. Address test
+    for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
+        *sdram_ptr(addr) = addr ^ 0xAAAAAAAA;
+    }
+    for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
+        readback = *sdram_ptr(addr);
+        if (readback != (addr ^ 0xAAAAAAAA)) {
+            printf("Address test error at 0x%08lX: wrote 0x%08lX, read 0x%08lX\n",
+                   (unsigned long)(SDRAM_START+addr), (unsigned long)(addr ^ 0xAAAAAAAA), (unsigned long)readback);
+            errors++;
+            break;
+        }
+    }
+
+    // 3. Pattern test
+    const uint32_t patterns[] = { 0x00000000, 0xFFFFFFFF, 0xAAAAAAAA, 0x55555555, 0x12345678, 0x87654321 };
+    for (int p = 0; p < (int)(sizeof(patterns)/sizeof(patterns[0])); p++) {
+        uint32_t pat = patterns[p];
+        printf("Pattern 0x%08lX ... ", (unsigned long)pat);
+
+        for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
+            *sdram_ptr(addr) = pat;
+        }
+        for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
+            readback = *sdram_ptr(addr);
+            if (readback != pat) {
+                printf("\nPattern error at 0x%08lX: wrote 0x%08lX, read 0x%08lX\n",
+                       (unsigned long)(SDRAM_START+addr), (unsigned long)pat, (unsigned long)readback);
+                errors++;
+                break;
+            }
+        }
+        printf("done\n");
+    }
+
+    if (errors == 0) {
+        printf("SDRAM test passed.\n");
+        return 0;
+    } else {
+        printf("SDRAM test failed with %lu errors.\n", (unsigned long)errors);
+        return -1;
+    }
+}
 
 /* USER CODE END 0 */
 
@@ -94,8 +212,28 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
+  MX_FMC_Init();
   /* USER CODE BEGIN 2 */
-  HAL_UART_Transmit(&huart1, "Start\n", 6, 100);
+  //HAL_UART_Transmit(&huart1, "Start\n", 6, 100);
+  printf("Start\n");
+
+  sdram_init();
+  printf("SDRAM inited\n");
+  printf("Starting memtest\n");
+  {
+	  volatile uint32_t *p = (uint32_t*)0xC0000000;
+	  for(uint32_t i = 0; i < 32*1024*1024/4; i++) {
+	      p[i] = 0xA5A5A5A5;      // write pattern
+	      if(p[i] != 0xA5A5A5A5) {
+	          // report fault, address = &p[i]
+	    	  printf("fault at %08x:04x\n",&p[i],p[i]);
+	          break;
+	      }
+	  }
+
+  }
+  //sdram_memtest();
+
 
   /* USER CODE END 2 */
 
@@ -128,7 +266,7 @@ void SystemClock_Config(void)
 
   /** Configure the main internal regulator output voltage
   */
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
   while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
 
@@ -140,7 +278,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = 5;
-  RCC_OscInitStruct.PLL.PLLN = 192;
+  RCC_OscInitStruct.PLL.PLLN = 160;
   RCC_OscInitStruct.PLL.PLLP = 2;
   RCC_OscInitStruct.PLL.PLLQ = 2;
   RCC_OscInitStruct.PLL.PLLR = 2;
@@ -165,7 +303,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
   RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -219,6 +357,53 @@ static void MX_USART1_UART_Init(void)
 
 }
 
+/* FMC initialization function */
+static void MX_FMC_Init(void)
+{
+
+  /* USER CODE BEGIN FMC_Init 0 */
+
+  /* USER CODE END FMC_Init 0 */
+
+  FMC_SDRAM_TimingTypeDef SdramTiming = {0};
+
+  /* USER CODE BEGIN FMC_Init 1 */
+
+  /* USER CODE END FMC_Init 1 */
+
+  /** Perform the SDRAM1 memory initialization sequence
+  */
+  hsdram1.Instance = FMC_SDRAM_DEVICE;
+  /* hsdram1.Init */
+  hsdram1.Init.SDBank = FMC_SDRAM_BANK1;
+  hsdram1.Init.ColumnBitsNumber = FMC_SDRAM_COLUMN_BITS_NUM_8;
+  hsdram1.Init.RowBitsNumber = FMC_SDRAM_ROW_BITS_NUM_13;
+  hsdram1.Init.MemoryDataWidth = FMC_SDRAM_MEM_BUS_WIDTH_16;
+  hsdram1.Init.InternalBankNumber = FMC_SDRAM_INTERN_BANKS_NUM_4;
+  hsdram1.Init.CASLatency = FMC_SDRAM_CAS_LATENCY_3;
+  hsdram1.Init.WriteProtection = FMC_SDRAM_WRITE_PROTECTION_DISABLE;
+  hsdram1.Init.SDClockPeriod = FMC_SDRAM_CLOCK_PERIOD_3;
+  hsdram1.Init.ReadBurst = FMC_SDRAM_RBURST_ENABLE;
+  hsdram1.Init.ReadPipeDelay = FMC_SDRAM_RPIPE_DELAY_2;
+  /* SdramTiming */
+  SdramTiming.LoadToActiveDelay = 3;
+  SdramTiming.ExitSelfRefreshDelay = 8;
+  SdramTiming.SelfRefreshTime = 6;
+  SdramTiming.RowCycleDelay = 8;
+  SdramTiming.WriteRecoveryTime = 4;
+  SdramTiming.RPDelay = 3;
+  SdramTiming.RCDDelay = 3;
+
+  if (HAL_SDRAM_Init(&hsdram1, &SdramTiming) != HAL_OK)
+  {
+    Error_Handler( );
+  }
+
+  /* USER CODE BEGIN FMC_Init 2 */
+
+  /* USER CODE END FMC_Init 2 */
+}
+
 /**
   * @brief GPIO Initialization Function
   * @param None
@@ -233,7 +418,11 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOG_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
@@ -277,6 +466,18 @@ void MPU_Config(void)
   MPU_InitStruct.IsShareable = MPU_ACCESS_SHAREABLE;
   MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
   MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
+
+  HAL_MPU_ConfigRegion(&MPU_InitStruct);
+
+  /** Initializes and configures the Region and the memory to be protected
+  */
+  MPU_InitStruct.Number = MPU_REGION_NUMBER1;
+  MPU_InitStruct.BaseAddress = 0xC0000000;
+  MPU_InitStruct.Size = MPU_REGION_SIZE_32MB;
+  MPU_InitStruct.SubRegionDisable = 0x0;
+  MPU_InitStruct.AccessPermission = MPU_REGION_FULL_ACCESS;
+  MPU_InitStruct.DisableExec = MPU_INSTRUCTION_ACCESS_ENABLE;
+  MPU_InitStruct.IsShareable = MPU_ACCESS_NOT_SHAREABLE;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
   /* Enables the MPU */
