@@ -78,6 +78,9 @@ SECTIONS
     
 
     *(.bss.internalrambuff)
+    *(.bss.src_sram)
+    *(.bss.dst_sram)
+    
 
     . = ALIGN(4);
     _etext = .;        /* define a global symbols at end of code */
