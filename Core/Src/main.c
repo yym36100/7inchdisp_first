@@ -452,8 +452,15 @@ int main(void)
   __HAL_LTDC_RELOAD_CONFIG(&hltdc); // reload shadow registers
   __HAL_LTDC_LAYER_ENABLE(&hltdc,0);
   HAL_GPIO_WritePin(LCD_BL_GPIO_Port,LCD_BL_Pin,1);
-  memset(0xc0000000,0xf0,1024*600*1);
+  //memset(0xc0000000,0xf0,1024*600*1);
+	{
+		uint32_t *src_sdram = (uint16_t*) 0xC0000000;
+		for (int i = 0; i < 1024 * 600; i++) {
+			*src_sdram++ = i;
+		}
+	}
   SCB_CleanDCache_by_Addr((uint32_t*)0xc0000000, 1024*600*2);
+  //restore c:\Users\yym\Downloads\sijeles.bin  binary 0xC0000000
 
 
   /* USER CODE END 2 */
@@ -600,14 +607,14 @@ static void MX_LTDC_Init(void)
   hltdc.Init.VSPolarity = LTDC_VSPOLARITY_AL;
   hltdc.Init.DEPolarity = LTDC_DEPOLARITY_AL;
   hltdc.Init.PCPolarity = LTDC_PCPOLARITY_IPC;
-  hltdc.Init.HorizontalSync = 0;
-  hltdc.Init.VerticalSync = 2;
-  hltdc.Init.AccumulatedHBP = 20;
-  hltdc.Init.AccumulatedVBP = 22;
-  hltdc.Init.AccumulatedActiveW = 1044;
-  hltdc.Init.AccumulatedActiveH = 622;
-  hltdc.Init.TotalWidth = 1064;
-  hltdc.Init.TotalHeigh = 628;
+  hltdc.Init.HorizontalSync = 9;
+  hltdc.Init.VerticalSync = 4;
+  hltdc.Init.AccumulatedHBP = 49;
+  hltdc.Init.AccumulatedVBP = 24;
+  hltdc.Init.AccumulatedActiveW = 1073;
+  hltdc.Init.AccumulatedActiveH = 624;
+  hltdc.Init.TotalWidth = 1104;
+  hltdc.Init.TotalHeigh = 634;
   hltdc.Init.Backcolor.Blue = 0;
   hltdc.Init.Backcolor.Green = 255;
   hltdc.Init.Backcolor.Red = 0;
@@ -616,9 +623,9 @@ static void MX_LTDC_Init(void)
     Error_Handler();
   }
   pLayerCfg.WindowX0 = 0;
-  pLayerCfg.WindowX1 = 1023;
+  pLayerCfg.WindowX1 = 1024;
   pLayerCfg.WindowY0 = 0;
-  pLayerCfg.WindowY1 = 599;
+  pLayerCfg.WindowY1 = 600;
   pLayerCfg.PixelFormat = LTDC_PIXEL_FORMAT_RGB565;
   pLayerCfg.Alpha = 255;
   pLayerCfg.Alpha0 = 0;
