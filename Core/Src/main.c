@@ -45,6 +45,8 @@ I2C_HandleTypeDef hi2c4;
 
 LTDC_HandleTypeDef hltdc;
 
+TIM_HandleTypeDef htim12;
+
 UART_HandleTypeDef huart1;
 
 SDRAM_HandleTypeDef hsdram1;
@@ -61,6 +63,7 @@ static void MX_USART1_UART_Init(void);
 static void MX_FMC_Init(void);
 static void MX_LTDC_Init(void);
 static void MX_I2C4_Init(void);
+static void MX_TIM12_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -423,6 +426,7 @@ int main(void)
   MX_FMC_Init();
   MX_LTDC_Init();
   MX_I2C4_Init();
+  MX_TIM12_Init();
   /* USER CODE BEGIN 2 */
   //HAL_UART_Transmit(&huart1, "Start\n", 6, 100);
   printf("Start\n");
@@ -451,7 +455,10 @@ int main(void)
   __HAL_LTDC_ENABLE(&hltdc);
   __HAL_LTDC_RELOAD_CONFIG(&hltdc); // reload shadow registers
   __HAL_LTDC_LAYER_ENABLE(&hltdc,0);
-  HAL_GPIO_WritePin(LCD_BL_GPIO_Port,LCD_BL_Pin,1);
+  //HAL_GPIO_WritePin(LCD_BL_GPIO_Port,LCD_BL_Pin,1);
+
+  HAL_TIM_PWM_Start(&htim12, TIM_CHANNEL_1);
+  __HAL_TIM_SET_COMPARE(&htim12, TIM_CHANNEL_1, 833);
   //memset(0xc0000000,0xf0,1024*600*1);
 	{
 		uint32_t *src_sdram = (uint16_t*) 0xC0000000;
@@ -460,7 +467,7 @@ int main(void)
 		}
 	}
   SCB_CleanDCache_by_Addr((uint32_t*)0xc0000000, 1024*600*2);
-  //restore c:\Users\yym\Downloads\sijeles.bin  binary 0xC0000000
+  //restore u:\work\2025\7inchdispcolor\ws\7inchdisp_first\tools\testimg1.bin binary 0xC0000000
 
 
   /* USER CODE END 2 */
@@ -648,6 +655,65 @@ static void MX_LTDC_Init(void)
 }
 
 /**
+  * @brief TIM12 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM12_Init(void)
+{
+
+  /* USER CODE BEGIN TIM12_Init 0 */
+
+  /* USER CODE END TIM12_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM12_Init 1 */
+
+  /* USER CODE END TIM12_Init 1 */
+  htim12.Instance = TIM12;
+  htim12.Init.Prescaler = 199;
+  htim12.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim12.Init.Period = 1666;
+  htim12.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim12.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim12) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim12, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim12) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim12, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 833;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim12, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM12_Init 2 */
+
+  /* USER CODE END TIM12_Init 2 */
+  HAL_TIM_MspPostInit(&htim12);
+
+}
+
+/**
   * @brief USART1 Initialization Function
   * @param None
   * @retval None
@@ -771,9 +837,6 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LCD_BL_GPIO_Port, LCD_BL_Pin, GPIO_PIN_SET);
-
-  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GT_RST_GPIO_Port, GT_RST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : lcd_rst_Pin */
@@ -796,12 +859,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(led_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LCD_BL_Pin GT_RST_Pin */
-  GPIO_InitStruct.Pin = LCD_BL_Pin|GT_RST_Pin;
+  /*Configure GPIO pin : GT_RST_Pin */
+  GPIO_InitStruct.Pin = GT_RST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
+  HAL_GPIO_Init(GT_RST_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
