@@ -1,20 +1,20 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2025 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2025 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -73,7 +73,7 @@ static void MX_QUADSPI_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void sdram_init(void){
+void sdram_init(void) {
 	FMC_SDRAM_CommandTypeDef command;
 
 	// Step 1: Enable clock
@@ -94,12 +94,11 @@ void sdram_init(void){
 	HAL_SDRAM_SendCommand(&hsdram1, &command, 0x1000);
 
 	// Step 4: Load Mode Register
-	uint32_t mode_reg = 0
-	  | (0x0 << 0)  // Burst Length = 1
-	  | (0x0 << 3)  // Burst Type = Sequential
-	  | (0x3 << 4)  // CAS Latency = 3
-	  | (0x0 << 7)  // Standard Operation
-	  | (0x1 << 9); // Write burst = Single
+	uint32_t mode_reg = 0 | (0x0 << 0)  // Burst Length = 1
+			| (0x0 << 3)  // Burst Type = Sequential
+			| (0x3 << 4)  // CAS Latency = 3
+			| (0x0 << 7)  // Standard Operation
+			| (0x1 << 9); // Write burst = Single
 
 	command.CommandMode = FMC_SDRAM_CMD_LOAD_MODE;
 	command.ModeRegisterDefinition = mode_reg;
@@ -110,85 +109,90 @@ void sdram_init(void){
 
 }
 
-int __io_putchar(int ch)
-{
-    HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-    return ch;
+int __io_putchar(int ch) {
+	HAL_UART_Transmit(&huart1, (uint8_t*) &ch, 1, HAL_MAX_DELAY);
+	return ch;
 }
-
 
 #define SDRAM_START ((uint32_t)0xC0000000)   // SDRAM Bank1 base
 #define SDRAM_SIZE  ((uint32_t)0x02000000)   // 32 MB for W9825G6KH (16M x16)
 #define SDRAM_END   (SDRAM_START + SDRAM_SIZE)
 
-static inline uint32_t *sdram_ptr(uint32_t offset) {
-    return (uint32_t *)(SDRAM_START + offset);
+static inline uint32_t* sdram_ptr(uint32_t offset) {
+	return (uint32_t*) (SDRAM_START + offset);
 }
 
-int sdram_memtest(void)
-{
-    uint32_t errors = 0;
-    uint32_t addr;
-    uint32_t readback;
+int sdram_memtest(void) {
+	uint32_t errors = 0;
+	uint32_t addr;
+	uint32_t readback;
 
-    printf("SDRAM test: 0x%08lX .. 0x%08lX\n", (unsigned long)SDRAM_START, (unsigned long)SDRAM_END-1);
+	printf("SDRAM test: 0x%08lX .. 0x%08lX\n", (unsigned long) SDRAM_START,
+			(unsigned long) SDRAM_END - 1);
 
-    // 1. Walking bit test
-    for (uint32_t bit = 0; bit < 32; bit++) {
-        uint32_t pattern = 1UL << bit;
-        *sdram_ptr(0) = pattern;
-        readback = *sdram_ptr(0);
-        if (readback != pattern) {
-            printf("Walking bit error at bit %lu: wrote 0x%08lX, read 0x%08lX\n",
-                   (unsigned long)bit, (unsigned long)pattern, (unsigned long)readback);
-            errors++;
-        }
-    }
+	// 1. Walking bit test
+	for (uint32_t bit = 0; bit < 32; bit++) {
+		uint32_t pattern = 1UL << bit;
+		*sdram_ptr(0) = pattern;
+		readback = *sdram_ptr(0);
+		if (readback != pattern) {
+			printf(
+					"Walking bit error at bit %lu: wrote 0x%08lX, read 0x%08lX\n",
+					(unsigned long) bit, (unsigned long) pattern,
+					(unsigned long) readback);
+			errors++;
+		}
+	}
 
-    // 2. Address test
-    for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
-        *sdram_ptr(addr) = addr ^ 0xAAAAAAAA;
-    }
-    for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
-        readback = *sdram_ptr(addr);
-        if (readback != (addr ^ 0xAAAAAAAA)) {
-            printf("Address test error at 0x%08lX: wrote 0x%08lX, read 0x%08lX\n",
-                   (unsigned long)(SDRAM_START+addr), (unsigned long)(addr ^ 0xAAAAAAAA), (unsigned long)readback);
-            errors++;
-            break;
-        }
-    }
+	// 2. Address test
+	for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
+		*sdram_ptr(addr) = addr ^ 0xAAAAAAAA;
+	}
+	for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
+		readback = *sdram_ptr(addr);
+		if (readback != (addr ^ 0xAAAAAAAA)) {
+			printf(
+					"Address test error at 0x%08lX: wrote 0x%08lX, read 0x%08lX\n",
+					(unsigned long) (SDRAM_START + addr),
+					(unsigned long) (addr ^ 0xAAAAAAAA),
+					(unsigned long) readback);
+			errors++;
+			break;
+		}
+	}
 
-    // 3. Pattern test
-    const uint32_t patterns[] = { 0x00000000, 0xFFFFFFFF, 0xAAAAAAAA, 0x55555555, 0x12345678, 0x87654321 };
-    for (int p = 0; p < (int)(sizeof(patterns)/sizeof(patterns[0])); p++) {
-        uint32_t pat = patterns[p];
-        printf("Pattern 0x%08lX ... ", (unsigned long)pat);
+	// 3. Pattern test
+	const uint32_t patterns[] = { 0x00000000, 0xFFFFFFFF, 0xAAAAAAAA,
+			0x55555555, 0x12345678, 0x87654321 };
+	for (int p = 0; p < (int) (sizeof(patterns) / sizeof(patterns[0])); p++) {
+		uint32_t pat = patterns[p];
+		printf("Pattern 0x%08lX ... ", (unsigned long) pat);
 
-        for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
-            *sdram_ptr(addr) = pat;
-        }
-        for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
-            readback = *sdram_ptr(addr);
-            if (readback != pat) {
-                printf("\nPattern error at 0x%08lX: wrote 0x%08lX, read 0x%08lX\n",
-                       (unsigned long)(SDRAM_START+addr), (unsigned long)pat, (unsigned long)readback);
-                errors++;
-                break;
-            }
-        }
-        printf("done\n");
-    }
+		for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
+			*sdram_ptr(addr) = pat;
+		}
+		for (addr = 0; addr < SDRAM_SIZE; addr += 4) {
+			readback = *sdram_ptr(addr);
+			if (readback != pat) {
+				printf(
+						"\nPattern error at 0x%08lX: wrote 0x%08lX, read 0x%08lX\n",
+						(unsigned long) (SDRAM_START + addr),
+						(unsigned long) pat, (unsigned long) readback);
+				errors++;
+				break;
+			}
+		}
+		printf("done\n");
+	}
 
-    if (errors == 0) {
-        printf("SDRAM test passed.\n");
-        return 0;
-    } else {
-        printf("SDRAM test failed with %lu errors.\n", (unsigned long)errors);
-        return -1;
-    }
+	if (errors == 0) {
+		printf("SDRAM test passed.\n");
+		return 0;
+	} else {
+		printf("SDRAM test failed with %lu errors.\n", (unsigned long) errors);
+		return -1;
+	}
 }
-
 
 #define SDRAM_BASE_ADDR 0xC0000000
 #undef SDRAM_SIZE
@@ -196,191 +200,316 @@ int sdram_memtest(void)
 #define SDRAM_WORDS     (SDRAM_SIZE / 4)
 
 typedef enum {
-    TEST_PATTERN_FIXED,
-    TEST_PATTERN_WALKING_ONES,
-    TEST_PATTERN_WALKING_ZEROS,
-    TEST_PATTERN_ALTERNATING,
-    TEST_PATTERN_RANDOM
+	TEST_PATTERN_FIXED,
+	TEST_PATTERN_WALKING_ONES,
+	TEST_PATTERN_WALKING_ZEROS,
+	TEST_PATTERN_ALTERNATING,
+	TEST_PATTERN_RANDOM
 } TestPattern;
 
 static inline uint32_t prng(uint32_t *state) {
-    // simple 32-bit LCG pseudo-random generator
-    *state = *state * 1664525 + 1013904223;
-    return *state;
+	// simple 32-bit LCG pseudo-random generator
+	*state = *state * 1664525 + 1013904223;
+	return *state;
 }
 
 // Perform one pass with a single pattern
-int SDRAM_Test_Pattern(uint32_t *mem, TestPattern pattern)
-{
-    uint32_t state = 0x12345678;
-    uint32_t write_val = 0;
+int SDRAM_Test_Pattern(uint32_t *mem, TestPattern pattern) {
+	uint32_t state = 0x12345678;
+	uint32_t write_val = 0;
 
-    for(uint32_t i = 0; i < SDRAM_WORDS; i++)
-    {
-        switch(pattern)
-        {
-            case TEST_PATTERN_FIXED: write_val = 0xA5A5A5A5; break;
-            case TEST_PATTERN_WALKING_ONES: write_val = 1U << (i % 32); break;
-            case TEST_PATTERN_WALKING_ZEROS: write_val = ~(1U << (i % 32)); break;
-            case TEST_PATTERN_ALTERNATING: write_val = (i % 2) ? 0xAAAAAAAA : 0x55555555; break;
-            case TEST_PATTERN_RANDOM: write_val = prng(&state); break;
-        }
-        mem[i] = write_val;
-    }
+	for (uint32_t i = 0; i < SDRAM_WORDS; i++) {
+		switch (pattern) {
+		case TEST_PATTERN_FIXED:
+			write_val = 0xA5A5A5A5;
+			break;
+		case TEST_PATTERN_WALKING_ONES:
+			write_val = 1U << (i % 32);
+			break;
+		case TEST_PATTERN_WALKING_ZEROS:
+			write_val = ~(1U << (i % 32));
+			break;
+		case TEST_PATTERN_ALTERNATING:
+			write_val = (i % 2) ? 0xAAAAAAAA : 0x55555555;
+			break;
+		case TEST_PATTERN_RANDOM:
+			write_val = prng(&state);
+			break;
+		}
+		mem[i] = write_val;
+	}
 
-    // Ensure all writes are visible in D-Cache
-    SCB_CleanDCache_by_Addr((uint32_t*)mem, SDRAM_SIZE);
-    state = 0x12345678;
+	// Ensure all writes are visible in D-Cache
+	SCB_CleanDCache_by_Addr((uint32_t*) mem, SDRAM_SIZE);
+	state = 0x12345678;
 
-    for(uint32_t i = 0; i < SDRAM_WORDS; i++)
-    {
-        switch(pattern)
-        {
-            case TEST_PATTERN_FIXED: write_val = 0xA5A5A5A5; break;
-            case TEST_PATTERN_WALKING_ONES: write_val = 1U << (i % 32); break;
-            case TEST_PATTERN_WALKING_ZEROS: write_val = ~(1U << (i % 32)); break;
-            case TEST_PATTERN_ALTERNATING: write_val = (i % 2) ? 0xAAAAAAAA : 0x55555555; break;
-            case TEST_PATTERN_RANDOM: write_val = prng(&state); break;
-        }
-        uint32_t read_val = mem[i];
-        SCB_InvalidateDCache_by_Addr((uint32_t*)&mem[i], 4);
-        if(read_val != write_val)
-        {
-            return i; // first failing index
-        }
-    }
+	for (uint32_t i = 0; i < SDRAM_WORDS; i++) {
+		switch (pattern) {
+		case TEST_PATTERN_FIXED:
+			write_val = 0xA5A5A5A5;
+			break;
+		case TEST_PATTERN_WALKING_ONES:
+			write_val = 1U << (i % 32);
+			break;
+		case TEST_PATTERN_WALKING_ZEROS:
+			write_val = ~(1U << (i % 32));
+			break;
+		case TEST_PATTERN_ALTERNATING:
+			write_val = (i % 2) ? 0xAAAAAAAA : 0x55555555;
+			break;
+		case TEST_PATTERN_RANDOM:
+			write_val = prng(&state);
+			break;
+		}
+		uint32_t read_val = mem[i];
+		SCB_InvalidateDCache_by_Addr((uint32_t*) &mem[i], 4);
+		if (read_val != write_val) {
+			return i; // first failing index
+		}
+	}
 
-    return -1; // passed
+	return -1; // passed
 }
 
 // Full SDRAM memory test with multiple patterns
-void SDRAM_FullTest(void)
-{
-    uint32_t *mem = (uint32_t*)SDRAM_BASE_ADDR;
-    int res;
+void SDRAM_FullTest(void) {
+	uint32_t *mem = (uint32_t*) SDRAM_BASE_ADDR;
+	int res;
 
-    TestPattern patterns[] = {
-        TEST_PATTERN_FIXED,
-        TEST_PATTERN_WALKING_ONES,
-        TEST_PATTERN_WALKING_ZEROS,
-        TEST_PATTERN_ALTERNATING,
-        TEST_PATTERN_RANDOM
-    };
+	TestPattern patterns[] = { TEST_PATTERN_FIXED, TEST_PATTERN_WALKING_ONES,
+			TEST_PATTERN_WALKING_ZEROS, TEST_PATTERN_ALTERNATING,
+			TEST_PATTERN_RANDOM };
 
-    for(int p = 0; p < sizeof(patterns)/sizeof(patterns[0]); p++)
-    {
-        res = SDRAM_Test_Pattern(mem, patterns[p]);
-        if(res < 0)
-            printf("Pattern %d passed\n", p);
-        else
-            printf("Pattern %d failed at address 0x%08X\n", p, SDRAM_BASE_ADDR + res*4);
-    }
+	for (int p = 0; p < sizeof(patterns) / sizeof(patterns[0]); p++) {
+		res = SDRAM_Test_Pattern(mem, patterns[p]);
+		if (res < 0)
+			printf("Pattern %d passed\n", p);
+		else
+			printf("Pattern %d failed at address 0x%08X\n", p,
+					SDRAM_BASE_ADDR + res * 4);
+	}
 }
 
-
-
 typedef enum {
-    PATTERN_FIXED,
-    PATTERN_WALKING_ONES,
-    PATTERN_WALKING_ZEROS,
-    PATTERN_ALTERNATING,
-    PATTERN_RANDOM
+	PATTERN_FIXED,
+	PATTERN_WALKING_ONES,
+	PATTERN_WALKING_ZEROS,
+	PATTERN_ALTERNATING,
+	PATTERN_RANDOM
 } TestPattern2;
 
 typedef enum {
-    ACCESS_8BIT=8,
-    ACCESS_16BIT=16,
-    ACCESS_32BIT=32
+	ACCESS_8BIT = 8, ACCESS_16BIT = 16, ACCESS_32BIT = 32
 } AccessSize;
 
-
 // Fill SDRAM with a pattern
-void SDRAM_Fill(uint32_t base, TestPattern2 pattern, AccessSize size, uint32_t seed)
-{
-    uint32_t state = seed;
-    for(uint32_t offset = 0; offset < SDRAM_SIZE; offset += (size/8))
-    {
-        uint32_t val = 0;
-        switch(pattern)
-        {
-            case PATTERN_FIXED: val = 0xA5A5A5A5; break;
-            case PATTERN_WALKING_ONES: val = 1U << ((offset/size*8) % 32); break;
-            case PATTERN_WALKING_ZEROS: val = ~(1U << ((offset/size*8) % 32)); break;
-            case PATTERN_ALTERNATING: val = ((offset/(size/8)) %2) ? 0xAAAAAAAA : 0x55555555; break;
-            case PATTERN_RANDOM: val = prng(&state); break;
-        }
+void SDRAM_Fill(uint32_t base, TestPattern2 pattern, AccessSize size,
+		uint32_t seed) {
+	uint32_t state = seed;
+	for (uint32_t offset = 0; offset < SDRAM_SIZE; offset += (size / 8)) {
+		uint32_t val = 0;
+		switch (pattern) {
+		case PATTERN_FIXED:
+			val = 0xA5A5A5A5;
+			break;
+		case PATTERN_WALKING_ONES:
+			val = 1U << ((offset / size * 8) % 32);
+			break;
+		case PATTERN_WALKING_ZEROS:
+			val = ~(1U << ((offset / size * 8) % 32));
+			break;
+		case PATTERN_ALTERNATING:
+			val = ((offset / (size / 8)) % 2) ? 0xAAAAAAAA : 0x55555555;
+			break;
+		case PATTERN_RANDOM:
+			val = prng(&state);
+			break;
+		}
 
-        switch(size)
-        {
-            case ACCESS_8BIT:  *((volatile uint8_t *)(base + offset)) = (uint8_t)val; break;
-            case ACCESS_16BIT: *((volatile uint16_t*)(base + offset)) = (uint16_t)val; break;
-            case ACCESS_32BIT: *((volatile uint32_t*)(base + offset)) = val; break;
-        }
-    }
+		switch (size) {
+		case ACCESS_8BIT:
+			*((volatile uint8_t*) (base + offset)) = (uint8_t) val;
+			break;
+		case ACCESS_16BIT:
+			*((volatile uint16_t*) (base + offset)) = (uint16_t) val;
+			break;
+		case ACCESS_32BIT:
+			*((volatile uint32_t*) (base + offset)) = val;
+			break;
+		}
+	}
 
-    // Ensure all writes hit SDRAM
-    SCB_CleanDCache_by_Addr((uint32_t*)base, SDRAM_SIZE);
+	// Ensure all writes hit SDRAM
+	SCB_CleanDCache_by_Addr((uint32_t*) base, SDRAM_SIZE);
 }
 
 // Verify SDRAM pattern
-int SDRAM_Verify(uint32_t base, TestPattern2 pattern, AccessSize size, uint32_t seed)
-{
-    uint32_t state = seed;
-    for(uint32_t offset = 0; offset < SDRAM_SIZE; offset += (size/8))
-    {
-        uint32_t expected = 0;
-        switch(pattern)
-        {
-            case PATTERN_FIXED: expected = 0xA5A5A5A5; break;
-            case PATTERN_WALKING_ONES: expected = 1U << ((offset/size*8) % 32); break;
-            case PATTERN_WALKING_ZEROS: expected = ~(1U << ((offset/size*8) % 32)); break;
-            case PATTERN_ALTERNATING: expected = ((offset/(size/8)) %2) ? 0xAAAAAAAA : 0x55555555; break;
-            case PATTERN_RANDOM: expected = prng(&state); break;
-        }
+int SDRAM_Verify(uint32_t base, TestPattern2 pattern, AccessSize size,
+		uint32_t seed) {
+	uint32_t state = seed;
+	for (uint32_t offset = 0; offset < SDRAM_SIZE; offset += (size / 8)) {
+		uint32_t expected = 0;
+		switch (pattern) {
+		case PATTERN_FIXED:
+			expected = 0xA5A5A5A5;
+			break;
+		case PATTERN_WALKING_ONES:
+			expected = 1U << ((offset / size * 8) % 32);
+			break;
+		case PATTERN_WALKING_ZEROS:
+			expected = ~(1U << ((offset / size * 8) % 32));
+			break;
+		case PATTERN_ALTERNATING:
+			expected = ((offset / (size / 8)) % 2) ? 0xAAAAAAAA : 0x55555555;
+			break;
+		case PATTERN_RANDOM:
+			expected = prng(&state);
+			break;
+		}
 
-        uint32_t read_val = 0;
-        switch(size)
-        {
-            case ACCESS_8BIT:  read_val = *((volatile uint8_t *)(base + offset)); break;
-            case ACCESS_16BIT: read_val = *((volatile uint16_t*)(base + offset)); break;
-            case ACCESS_32BIT: read_val = *((volatile uint32_t*)(base + offset)); break;
-        }
+		uint32_t read_val = 0;
+		switch (size) {
+		case ACCESS_8BIT:
+			read_val = *((volatile uint8_t*) (base + offset));
+			break;
+		case ACCESS_16BIT:
+			read_val = *((volatile uint16_t*) (base + offset));
+			break;
+		case ACCESS_32BIT:
+			read_val = *((volatile uint32_t*) (base + offset));
+			break;
+		}
 
-        SCB_InvalidateDCache_by_Addr((uint32_t*)(base + offset), size/8);
+		SCB_InvalidateDCache_by_Addr((uint32_t*) (base + offset), size / 8);
 
-        if(read_val != (expected & ((1UL<<size)-1)))
-        {
-            return offset; // first failing address
-        }
-    }
-    return -1; // passed
+		if (read_val != (expected & ((1UL << size) - 1))) {
+			return offset; // first failing address
+		}
+	}
+	return -1; // passed
 }
 
 // Run full SDRAM test
-void SDRAM_FullTest2(void)
-{
-    TestPattern2 patterns[] = {PATTERN_FIXED, PATTERN_WALKING_ONES, PATTERN_WALKING_ZEROS, PATTERN_ALTERNATING, PATTERN_RANDOM};
-    AccessSize sizes[] = {ACCESS_8BIT, ACCESS_16BIT, ACCESS_32BIT};
-    uint32_t seed = 0x12345678;
+void SDRAM_FullTest2(void) {
+	TestPattern2 patterns[] = { PATTERN_FIXED, PATTERN_WALKING_ONES,
+			PATTERN_WALKING_ZEROS, PATTERN_ALTERNATING, PATTERN_RANDOM };
+	AccessSize sizes[] = { ACCESS_8BIT, ACCESS_16BIT, ACCESS_32BIT };
+	uint32_t seed = 0x12345678;
 
-    for(int p=0; p<sizeof(patterns)/sizeof(patterns[0]); p++)
-    {
-        for(int s=0; s<sizeof(sizes)/sizeof(sizes[0]); s++)
-        {
-            SDRAM_Fill(SDRAM_BASE_ADDR, patterns[p], sizes[s], seed);
-            int fail = SDRAM_Verify(SDRAM_BASE_ADDR, patterns[p], sizes[s], seed);
-            if(fail < 0)
-                printf("Pattern %d, Access %d-bit: PASS\n", p, (s==0?8:(s==1?16:32)));
-            else
-                printf("Pattern %d, Access %d-bit: FAIL at 0x%08X\n", p, (s==0?8:(s==1?16:32)), SDRAM_BASE_ADDR+fail);
-        }
-    }
+	for (int p = 0; p < sizeof(patterns) / sizeof(patterns[0]); p++) {
+		for (int s = 0; s < sizeof(sizes) / sizeof(sizes[0]); s++) {
+			SDRAM_Fill(SDRAM_BASE_ADDR, patterns[p], sizes[s], seed);
+			int fail = SDRAM_Verify(SDRAM_BASE_ADDR, patterns[p], sizes[s],
+					seed);
+			if (fail < 0)
+				printf("Pattern %d, Access %d-bit: PASS\n", p,
+						(s == 0 ? 8 : (s == 1 ? 16 : 32)));
+			else
+				printf("Pattern %d, Access %d-bit: FAIL at 0x%08X\n", p,
+						(s == 0 ? 8 : (s == 1 ? 16 : 32)),
+						SDRAM_BASE_ADDR + fail);
+		}
+	}
 }
-
 
 extern void run_memory_benchmarks(void);
 extern void run_dma_benchmarks(void);
 
+int winbond_write_enable(void) {
+	QSPI_CommandTypeDef cmd = { 0 };
+	cmd.InstructionMode = QSPI_INSTRUCTION_1_LINE;
+	cmd.Instruction = 0x06; // Write Enable
+	cmd.AddressMode = QSPI_ADDRESS_1_LINE;
+	cmd.DataMode = QSPI_DATA_1_LINE;
+	cmd.DummyCycles = 0;
+	cmd.SIOOMode = QSPI_SIOO_INST_EVERY_CMD;
+	return (HAL_QSPI_Command(&hqspi, &cmd, 100) == HAL_OK) ? 0 : -1;
+}
+
+int winbond_set_qe(void) {
+	uint8_t sr2;
+	// 1) Write enable
+	winbond_write_enable();
+
+	// 2) Write status register 2: set QE (bit 1 for many Winbond)
+	QSPI_CommandTypeDef cmd = { 0 };
+	cmd.InstructionMode = QSPI_INSTRUCTION_1_LINE;
+	cmd.Instruction = 0x31; // Write SR2 (Winbond uses 0x31)
+	cmd.AddressMode = QSPI_ADDRESS_1_LINE;
+	cmd.DataMode = QSPI_DATA_1_LINE;
+	cmd.NbData = 1;
+	uint8_t data = 0x02; // QE = bit1 (check your part's datasheet)
+	if (HAL_QSPI_Command(&hqspi, &cmd, 100) != HAL_OK)
+		return -1;
+	if (HAL_QSPI_Transmit(&hqspi, &data, 100) != HAL_OK)
+		return -1;
+
+	// 3) Wait until not busy (read status reg)
+	// (Implement read-status busy polling here)
+	return 0;
+}
+void qspi_memmap(void) {
+	QSPI_CommandTypeDef sCommand = { 0 };
+	QSPI_MemoryMappedTypeDef sMemMappedCfg = { 0 };
+
+	/* 0xEB Quad I/O Fast Read */
+	sCommand.InstructionMode = QSPI_INSTRUCTION_1_LINE;
+	sCommand.Instruction = 0xEB;
+	sCommand.AddressMode = QSPI_ADDRESS_4_LINES;   // Quad address
+	sCommand.AddressSize = QSPI_ADDRESS_24_BITS;
+	sCommand.AlternateByteMode = QSPI_ALTERNATE_BYTES_4_LINES;
+	sCommand.AlternateBytesSize = QSPI_ALTERNATE_BYTES_8_BITS; // if used
+	sCommand.AlternateBytes = 0;
+	sCommand.DummyCycles = 8; // start here; increase to 10..12 if needed
+	sCommand.DataMode = QSPI_DATA_4_LINES;
+	sCommand.DdrMode = QSPI_DDR_MODE_DISABLE; // H743 doesn't support DDR for QSPI
+	sCommand.SIOOMode = QSPI_SIOO_INST_EVERY_CMD; // or INST_EVERY_CMD
+
+	sMemMappedCfg.TimeOutActivation = QSPI_TIMEOUT_COUNTER_DISABLE;
+
+	if (HAL_QSPI_MemoryMapped(&hqspi, &sCommand, &sMemMappedCfg) != HAL_OK)
+		Error_Handler();
+}
+
+typedef enum
+{
+  BQB_Cmd_ReadID = 0x9F,
+  BQB_Cmd_ReadStatus1 = 0x05,
+  BQB_Cmd_WriteEnable = 0x06,
+  BQB_Cmd_SectorErase = 0x20,
+  BQB_Cmd_ChipErase = 0xC7,
+  BQB_Cmd_PageProgram_Quad = 0x32,
+  BQB_Cmd_FastRead_Quad = 0xEB,
+}BQB_Cmd_E;
+
+
+int BspQspiBoot_MemMapped(void)
+{
+  QSPI_CommandTypeDef s_command = {0};
+  QSPI_MemoryMappedTypeDef s_mem_mapped_cfg = {0};
+
+  s_command.InstructionMode          = QSPI_INSTRUCTION_1_LINE;     /* 1Ïß·½Ê½·¢ËÍÖ¸Áî */
+  s_command.AddressSize              = QSPI_ADDRESS_24_BITS;        /* 24Î»µØÖ· */
+  s_command.AlternateByteMode        = QSPI_ALTERNATE_BYTES_NONE;   /* ÎÞ½»Ìæ×Ö½Ú */
+  s_command.DdrMode                  = QSPI_DDR_MODE_DISABLE;       /* W25Q64JV²»Ö§³ÖDDR */
+  s_command.DdrHoldHalfCycle         = QSPI_DDR_HHC_ANALOG_DELAY;   /* DDRÄ£Ê½£¬Êý¾ÝÊä³öÑÓ³Ù */
+  s_command.SIOOMode                 = QSPI_SIOO_INST_EVERY_CMD;    /* Ã¿´Î´«Êä¶¼·¢Ö¸Áî */
+
+  s_command.Instruction              = BQB_Cmd_FastRead_Quad;       /* ¿ìËÙ¶ÁÈ¡ÃüÁî */
+  s_command.AddressMode              = QSPI_ADDRESS_4_LINES;        /* 4¸öµØÖ·Ïß */
+  s_command.DataMode                 = QSPI_DATA_4_LINES;           /* 4¸öÊý¾ÝÏß */
+  s_command.DummyCycles              = 6;                           /* ¿ÕÖÜÆÚ */
+
+  s_mem_mapped_cfg.TimeOutActivation = QSPI_TIMEOUT_COUNTER_DISABLE;
+  s_mem_mapped_cfg.TimeOutPeriod = 0;
+
+  if(HAL_QSPI_MemoryMapped(&hqspi, &s_command, &s_mem_mapped_cfg) != HAL_OK)
+  {
+    return 1;
+  }
+
+  return 0;
+}
 
 /* USER CODE END 0 */
 
@@ -392,7 +521,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
 
   /* USER CODE END 1 */
 
@@ -432,61 +560,61 @@ int main(void)
   MX_TIM12_Init();
   MX_QUADSPI_Init();
   /* USER CODE BEGIN 2 */
-  //HAL_UART_Transmit(&huart1, "Start\n", 6, 100);
-  printf("Start\n");
 
-  sdram_init();
-  printf("SDRAM inited\n");
-  printf("Starting memtest\n");
-  {
-	  volatile uint32_t *p = (uint32_t*)0xC0000000;
-	  for(uint32_t i = 0; i < 32*1024*1024/4; i++) {
-	      p[i] = 0xA5A5A5A5;      // write pattern
-	      if(p[i] != 0xA5A5A5A5) {
-	          // report fault, address = &p[i]
-	    	  printf("fault at %08x:%04x\n",&p[i],p[i]);
-	          break;
-	      }
-	  }
+  BspQspiBoot_MemMapped();
+	//HAL_UART_Transmit(&huart1, "Start\n", 6, 100);
+	printf("Start\n");
 
-  }
-  //sdram_memtest();
-  //SDRAM_FullTest();
-  //SDRAM_FullTest2();
-  HAL_GPIO_WritePin(lcd_rst_GPIO_Port, lcd_rst_Pin, 1);
-  run_memory_benchmarks();
-  run_dma_benchmarks();
-  __HAL_LTDC_ENABLE(&hltdc);
-  __HAL_LTDC_RELOAD_CONFIG(&hltdc); // reload shadow registers
-  __HAL_LTDC_LAYER_ENABLE(&hltdc,0);
-  //HAL_GPIO_WritePin(LCD_BL_GPIO_Port,LCD_BL_Pin,1);
+	sdram_init();
+	printf("SDRAM inited\n");
+	printf("Starting memtest\n");
+	{
+		volatile uint32_t *p = (uint32_t*) 0xC0000000;
+		for (uint32_t i = 0; i < 32 * 1024 * 1024 / 4; i++) {
+			p[i] = 0xA5A5A5A5;      // write pattern
+			if (p[i] != 0xA5A5A5A5) {
+				// report fault, address = &p[i]
+				printf("fault at %08x:%04x\n", &p[i], p[i]);
+				break;
+			}
+		}
 
-  HAL_TIM_PWM_Start(&htim12, TIM_CHANNEL_1);
-  __HAL_TIM_SET_COMPARE(&htim12, TIM_CHANNEL_1, 833);
-  //memset(0xc0000000,0xf0,1024*600*1);
+	}
+	//sdram_memtest();
+	//SDRAM_FullTest();
+	//SDRAM_FullTest2();
+	HAL_GPIO_WritePin(lcd_rst_GPIO_Port, lcd_rst_Pin, 1);
+	run_memory_benchmarks();
+	run_dma_benchmarks();
+	__HAL_LTDC_ENABLE(&hltdc);
+	__HAL_LTDC_RELOAD_CONFIG(&hltdc); // reload shadow registers
+	__HAL_LTDC_LAYER_ENABLE(&hltdc, 0);
+	//HAL_GPIO_WritePin(LCD_BL_GPIO_Port,LCD_BL_Pin,1);
+
+	HAL_TIM_PWM_Start(&htim12, TIM_CHANNEL_1);
+	__HAL_TIM_SET_COMPARE(&htim12, TIM_CHANNEL_1, 833);
+	//memset(0xc0000000,0xf0,1024*600*1);
 	{
 		uint32_t *src_sdram = (uint16_t*) 0xC0000000;
 		for (int i = 0; i < 1024 * 600; i++) {
 			*src_sdram++ = i;
 		}
 	}
-  SCB_CleanDCache_by_Addr((uint32_t*)0xc0000000, 1024*600*2);
-  //restore u:\work\2025\7inchdispcolor\ws\7inchdisp_first\tools\testimg1.bin binary 0xC0000000
-
+	SCB_CleanDCache_by_Addr((uint32_t*) 0xc0000000, 1024 * 600 * 2);
+	//restore u:\work\2025\7inchdispcolor\ws\7inchdisp_first\tools\testimg1.bin binary 0xC0000000
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-	  HAL_UART_Transmit(&huart1, ".", 1, 100);
-	  HAL_Delay(500);
-	  HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
+	while (1) {
+		HAL_UART_Transmit(&huart1, ".", 1, 100);
+		HAL_Delay(500);
+		HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  }
+	}
   /* USER CODE END 3 */
 }
 
@@ -676,10 +804,10 @@ static void MX_QUADSPI_Init(void)
   /* QUADSPI parameter configuration*/
   hqspi.Instance = QUADSPI;
   hqspi.Init.ClockPrescaler = 2;
-  hqspi.Init.FifoThreshold = 4;
+  hqspi.Init.FifoThreshold = 32;
   hqspi.Init.SampleShifting = QSPI_SAMPLE_SHIFTING_HALFCYCLE;
-  hqspi.Init.FlashSize = 23;
-  hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_1_CYCLE;
+  hqspi.Init.FlashSize = 24;
+  hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_4_CYCLE;
   hqspi.Init.ClockMode = QSPI_CLOCK_MODE_0;
   hqspi.Init.FlashID = QSPI_FLASH_ID_1;
   hqspi.Init.DualFlash = QSPI_DUALFLASH_DISABLE;
@@ -972,11 +1100,10 @@ void MPU_Config(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
-  __disable_irq();
-  while (1)
-  {
-  }
+	/* User can add his own implementation to report the HAL error return state */
+	__disable_irq();
+	while (1) {
+	}
   /* USER CODE END Error_Handler_Debug */
 }
 #ifdef USE_FULL_ASSERT

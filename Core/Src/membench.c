@@ -113,7 +113,7 @@ void run_memory_benchmarks(void)
     MemBenchmarkResult flash32 = benchmark_memory32((void*)0x08000000, 1024*1024);
     printf("FLASH 32-bit: Read %.1f MB/s\n", flash32.read_MBps);
 
-#if 0
+#if 1
     // 4. Optional: QSPI external flash
     MemBenchmarkResult qspi32 = benchmark_memory32((void*)QSPI_BASE, 8*1024*1024);
     printf("QSPI 32-bit: Read %.1f MB/s\n", qspi32.read_MBps);
