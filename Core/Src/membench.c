@@ -89,6 +89,29 @@ MemBenchmarkResult benchmark_memory32(void *base, uint32_t size_bytes)
 
     return res;
 }
+MemBenchmarkResult benchmark_memory32_read(void *base, uint32_t size_bytes)
+{
+    MemBenchmarkResult res = {0};
+    volatile uint32_t *ptr = (volatile uint32_t*)base;
+    uint32_t count = size_bytes / 4;
+
+
+    uint32_t start, end;
+    // --- Read benchmark ---
+    SCB_InvalidateDCache_by_Addr((uint32_t*)base, size_bytes);
+    start = DWT_GetCycles();
+    uint32_t sum = read32(ptr, count);
+    end = DWT_GetCycles();
+
+    res.read_bytes = size_bytes;
+    res.read_MBps = ((float)size_bytes / 1e6f) / ((float)(end-start) / HAL_RCC_GetSysClockFreq());
+
+    // Use sum to prevent compiler optimizing away reads
+    if(sum == 0xFFFFFFFF) printf("Impossible\n");
+
+    return res;
+}
+
 
 // --- Example usage ---
 void run_memory_benchmarks(void)
@@ -115,7 +138,7 @@ void run_memory_benchmarks(void)
 
 #if 1
     // 4. Optional: QSPI external flash
-    MemBenchmarkResult qspi32 = benchmark_memory32((void*)QSPI_BASE, 8*1024*1024);
+    MemBenchmarkResult qspi32 = benchmark_memory32_read((void*)QSPI_BASE, 8*1024*1024);
     printf("QSPI 32-bit: Read %.1f MB/s\n", qspi32.read_MBps);
 #endif
 }

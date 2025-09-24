@@ -415,61 +415,14 @@ void SDRAM_FullTest2(void) {
 extern void run_memory_benchmarks(void);
 extern void run_dma_benchmarks(void);
 
-int winbond_write_enable(void) {
-	QSPI_CommandTypeDef cmd = { 0 };
-	cmd.InstructionMode = QSPI_INSTRUCTION_1_LINE;
-	cmd.Instruction = 0x06; // Write Enable
-	cmd.AddressMode = QSPI_ADDRESS_1_LINE;
-	cmd.DataMode = QSPI_DATA_1_LINE;
-	cmd.DummyCycles = 0;
-	cmd.SIOOMode = QSPI_SIOO_INST_EVERY_CMD;
-	return (HAL_QSPI_Command(&hqspi, &cmd, 100) == HAL_OK) ? 0 : -1;
-}
+#define QSPI_FLASH_MEM_ADDR       0x90000000
 
-int winbond_set_qe(void) {
-	uint8_t sr2;
-	// 1) Write enable
-	winbond_write_enable();
+#define QSPI_FLASH_SIZE           25
 
-	// 2) Write status register 2: set QE (bit 1 for many Winbond)
-	QSPI_CommandTypeDef cmd = { 0 };
-	cmd.InstructionMode = QSPI_INSTRUCTION_1_LINE;
-	cmd.Instruction = 0x31; // Write SR2 (Winbond uses 0x31)
-	cmd.AddressMode = QSPI_ADDRESS_1_LINE;
-	cmd.DataMode = QSPI_DATA_1_LINE;
-	cmd.NbData = 1;
-	uint8_t data = 0x02; // QE = bit1 (check your part's datasheet)
-	if (HAL_QSPI_Command(&hqspi, &cmd, 100) != HAL_OK)
-		return -1;
-	if (HAL_QSPI_Transmit(&hqspi, &data, 100) != HAL_OK)
-		return -1;
-
-	// 3) Wait until not busy (read status reg)
-	// (Implement read-status busy polling here)
-	return 0;
-}
-void qspi_memmap(void) {
-	QSPI_CommandTypeDef sCommand = { 0 };
-	QSPI_MemoryMappedTypeDef sMemMappedCfg = { 0 };
-
-	/* 0xEB Quad I/O Fast Read */
-	sCommand.InstructionMode = QSPI_INSTRUCTION_1_LINE;
-	sCommand.Instruction = 0xEB;
-	sCommand.AddressMode = QSPI_ADDRESS_4_LINES;   // Quad address
-	sCommand.AddressSize = QSPI_ADDRESS_24_BITS;
-	sCommand.AlternateByteMode = QSPI_ALTERNATE_BYTES_4_LINES;
-	sCommand.AlternateBytesSize = QSPI_ALTERNATE_BYTES_8_BITS; // if used
-	sCommand.AlternateBytes = 0;
-	sCommand.DummyCycles = 8; // start here; increase to 10..12 if needed
-	sCommand.DataMode = QSPI_DATA_4_LINES;
-	sCommand.DdrMode = QSPI_DDR_MODE_DISABLE; // H743 doesn't support DDR for QSPI
-	sCommand.SIOOMode = QSPI_SIOO_INST_EVERY_CMD; // or INST_EVERY_CMD
-
-	sMemMappedCfg.TimeOutActivation = QSPI_TIMEOUT_COUNTER_DISABLE;
-
-	if (HAL_QSPI_MemoryMapped(&hqspi, &sCommand, &sMemMappedCfg) != HAL_OK)
-		Error_Handler();
-}
+#define QSPI_FLASH_SECTOR_SIZE    (4*1024)
+#define QSPI_FLASH_PAGE_SIZE      (256)
+#define QSPI_FLASH_END_ADDR       (1<<QSPI_FLASH_SIZE)
+#define QSPI_FLASH_BYTE_SIZE      (16*1024*1024)
 
 typedef enum
 {
@@ -482,6 +435,65 @@ typedef enum
   BQB_Cmd_FastRead_Quad = 0xEB,
 }BQB_Cmd_E;
 
+
+int BspQspiBoot_Init(void)
+{
+  uint32_t i;
+  char *p;
+
+  /* ½«¾ä±úÊÖ¶¯ÇåÁã£¬·ÀÖ¹×÷ÎªÈ«¾Ö±äÁ¿µÄÊ±ºòÃ»ÓÐÇåÁã */
+  p = (char *)&hqspi;
+  for (i = 0; i < sizeof(QSPI_HandleTypeDef); i++)
+  {
+    *p++ = 0;
+  }
+
+  /* ¸´Î»QSPI */
+  hqspi.Instance = QUADSPI;
+
+  if (HAL_QSPI_DeInit(&hqspi) != HAL_OK)
+  {
+    return 1;
+  }
+
+  /* ÉèÖÃÊ±ÖÓËÙ¶È£¬QSPI clock = 200MHz / (ClockPrescaler+1) = 100MHz */
+  hqspi.Init.ClockPrescaler = 1;
+
+  /* ÉèÖÃFIFO·§Öµ£¬·¶Î§1 - 32 */
+  hqspi.Init.FifoThreshold = 1;
+
+  /*
+      QUADSPIÔÚFLASHÇý¶¯ÐÅºÅºó¹ý°ë¸öCLKÖÜÆÚ²Å¶ÔFLASHÇý¶¯µÄÊý¾Ý²ÉÑù¡£
+      ÔÚÍâ²¿ÐÅºÅÑÓ³ÙÊ±£¬ÕâÓÐÀûÓÚÍÆ³ÙÊý¾Ý²ÉÑù¡£
+  */
+  hqspi.Init.SampleShifting = QSPI_SAMPLE_SHIFTING_HALFCYCLE;
+
+  /* Flash´óÐ¡ÊÇ2^(FlashSize + 1) = 2^23 = 8MB */
+  hqspi.Init.FlashSize = QSPI_FLASH_SIZE; //QSPI_FLASH_SIZE - 1; 2020-03-04, ÐèÒªÀ©´óÒ»±¶£¬·ñÔòÄÚ´æÓ³Éä·½Î»×îºó1¸öµØÖ·Ê±£¬»áÒì³£
+
+  /* ÃüÁîÖ®¼äµÄCSÆ¬Ñ¡ÖÁÉÙ±£³Ö1¸öÊ±ÖÓÖÜÆÚµÄ¸ßµçÆ½ */
+  hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_2_CYCLE;//QSPI_CS_HIGH_TIME_5_CYCLE
+
+  /*
+     MODE0: ±íÊ¾Æ¬Ñ¡ÐÅºÅ¿ÕÏÐÆÚ¼ä£¬CLKÊ±ÖÓÐÅºÅÊÇµÍµçÆ½
+     MODE3: ±íÊ¾Æ¬Ñ¡ÐÅºÅ¿ÕÏÐÆÚ¼ä£¬CLKÊ±ÖÓÐÅºÅÊÇ¸ßµçÆ½
+  */
+  hqspi.Init.ClockMode = QSPI_CLOCK_MODE_0;
+
+  /* QSPIÓÐÁ½¸öBANK£¬ÕâÀïÊ¹ÓÃµÄBANK1 */
+  hqspi.Init.FlashID = QSPI_FLASH_ID_1;
+
+  /* Ê¹ÓÃÁËBANK1£¬ÕâÀïÊÇ½ûÖ¹Ë«BANK */
+  hqspi.Init.DualFlash = QSPI_DUALFLASH_DISABLE;
+
+  /* ³õÊ¼»¯ÅäÖÃQSPI */
+  if (HAL_QSPI_Init(&hqspi) != HAL_OK)
+  {
+    return 1;
+  }
+
+  return 0;
+}
 
 int BspQspiBoot_MemMapped(void)
 {
@@ -548,7 +560,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  BspQspiBoot_Init();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -560,7 +572,10 @@ int main(void)
   MX_TIM12_Init();
   MX_QUADSPI_Init();
   /* USER CODE BEGIN 2 */
+  //uint32_t qspi_id = BspQspiBoot_ReadID();
+  //printf("qspi id= %08x\n",qspi_id);
 
+  //BspQspiBoot_MemMapped();
   BspQspiBoot_MemMapped();
 	//HAL_UART_Transmit(&huart1, "Start\n", 6, 100);
 	printf("Start\n");
@@ -803,11 +818,11 @@ static void MX_QUADSPI_Init(void)
   /* USER CODE END QUADSPI_Init 1 */
   /* QUADSPI parameter configuration*/
   hqspi.Instance = QUADSPI;
-  hqspi.Init.ClockPrescaler = 2;
+  hqspi.Init.ClockPrescaler = 1;
   hqspi.Init.FifoThreshold = 32;
   hqspi.Init.SampleShifting = QSPI_SAMPLE_SHIFTING_HALFCYCLE;
-  hqspi.Init.FlashSize = 24;
-  hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_4_CYCLE;
+  hqspi.Init.FlashSize = 23;
+  hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_2_CYCLE;
   hqspi.Init.ClockMode = QSPI_CLOCK_MODE_0;
   hqspi.Init.FlashID = QSPI_FLASH_ID_1;
   hqspi.Init.DualFlash = QSPI_DUALFLASH_DISABLE;
@@ -1086,6 +1101,7 @@ void MPU_Config(void)
   */
   MPU_InitStruct.Number = MPU_REGION_NUMBER2;
   MPU_InitStruct.BaseAddress = 0x90000000;
+  MPU_InitStruct.AccessPermission = MPU_REGION_PRIV_RO_URO;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
   /* Enables the MPU */
