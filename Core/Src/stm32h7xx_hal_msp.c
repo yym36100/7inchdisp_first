@@ -393,8 +393,6 @@ void HAL_QSPI_MspInit(QSPI_HandleTypeDef* hqspi)
     GPIO_InitStruct.Alternate = GPIO_AF10_QUADSPI;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-    HAL_I2CEx_EnableFastModePlus(SYSCFG_PMCR_I2C_PB6_FMP);
-
     /* QUADSPI interrupt Init */
     HAL_NVIC_SetPriority(QUADSPI_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(QUADSPI_IRQn);

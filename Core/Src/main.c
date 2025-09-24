@@ -560,7 +560,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-  BspQspiBoot_Init();
+  //BspQspiBoot_Init();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -1101,7 +1101,7 @@ void MPU_Config(void)
   */
   MPU_InitStruct.Number = MPU_REGION_NUMBER2;
   MPU_InitStruct.BaseAddress = 0x90000000;
-  MPU_InitStruct.AccessPermission = MPU_REGION_PRIV_RO_URO;
+  MPU_InitStruct.Size = MPU_REGION_SIZE_16MB;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
   /* Enables the MPU */
