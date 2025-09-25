@@ -62,13 +62,13 @@ static inline uint32_t read32(volatile uint32_t *ptr, uint32_t count)
 uint32_t sdbuff[10* 512/4];
 void sd_read_benchmark(void){
 		MemBenchmarkResult res = {0};
-		uint32_t size_bytes  = 512*2;
-		//static uint32_t *sdram = (uint32_t*)0xC0000000;
+		uint32_t size_bytes  = 512*128;
+		static uint32_t *sdram = (uint32_t*)0xC0000000;
 
-		//memset(sdbuff,0,32*1024*1024);
+		memset(sdram,0,32*1024*1024);
 	 	uint32_t start = DWT_GetCycles();
 
-	 	HAL_SD_ReadBlocks(&hsd2, sdbuff, 0, 2, 10000);
+	 	HAL_SD_ReadBlocks(&hsd2, sdram, 0, 128, 10000);
 
 
 	    uint32_t end = DWT_GetCycles();
