@@ -5,10 +5,11 @@
 #pragma GCC push_options
 #pragma GCC optimize ("O3")   // or "Os", "O2", etc.
 
-uint32_t internalrambuff[256*1024/4];
+uint32_t internalrambuff[32*1024/4];
 
 uint32_t dtcram[32*1024/4];
 
+extern SD_HandleTypeDef hsd2;
 
 #include "stm32h7xx_hal.h"
 #include <stdint.h>
@@ -56,6 +57,26 @@ static inline uint32_t read32(volatile uint32_t *ptr, uint32_t count)
         __asm__ volatile("" ::: "memory"); // prevent optimization
     }
     return sum;
+}
+
+uint32_t sdbuff[10* 512/4];
+void sd_read_benchmark(void){
+		MemBenchmarkResult res = {0};
+		uint32_t size_bytes  = 512*2;
+		//static uint32_t *sdram = (uint32_t*)0xC0000000;
+
+		//memset(sdbuff,0,32*1024*1024);
+	 	uint32_t start = DWT_GetCycles();
+
+	 	HAL_SD_ReadBlocks(&hsd2, sdbuff, 0, 2, 10000);
+
+
+	    uint32_t end = DWT_GetCycles();
+
+	    res.read_bytes = size_bytes;
+	    res.read_MBps = ((float)size_bytes / 1e6f) / ((float)(end-start) / HAL_RCC_GetSysClockFreq());
+
+	    printf("SD read: %.1f MB/s (size = %d),\n", res.read_MBps,size_bytes);
 }
 
 // --- Generic memory benchmark ---
@@ -119,7 +140,7 @@ void run_memory_benchmarks(void)
     DWT_Init();
 
     // 1. Internal SRAM 512KB
-    MemBenchmarkResult sram32 = benchmark_memory32((void*)internalrambuff, 256*1024);
+    MemBenchmarkResult sram32 = benchmark_memory32((void*)internalrambuff, 32*1024);
     printf("SRAM 32-bit: Read %.1f MB/s, Write %.1f MB/s\n", sram32.read_MBps, sram32.write_MBps);
 
 

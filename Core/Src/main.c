@@ -47,9 +47,12 @@ LTDC_HandleTypeDef hltdc;
 
 QSPI_HandleTypeDef hqspi;
 
+SD_HandleTypeDef hsd2;
+
 TIM_HandleTypeDef htim12;
 
 UART_HandleTypeDef huart1;
+DMA_HandleTypeDef hdma_usart1_rx;
 
 SDRAM_HandleTypeDef hsdram1;
 
@@ -61,12 +64,14 @@ SDRAM_HandleTypeDef hsdram1;
 void SystemClock_Config(void);
 static void MPU_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_FMC_Init(void);
 static void MX_LTDC_Init(void);
 static void MX_I2C4_Init(void);
 static void MX_TIM12_Init(void);
 static void MX_QUADSPI_Init(void);
+static void MX_SDMMC2_SD_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -523,6 +528,13 @@ int BspQspiBoot_MemMapped(void)
   return 0;
 }
 
+
+extern int print_sd_info(void);
+extern void print_sd_card_info(void);
+extern void print_sd_card_details(void);
+volatile int retest = 0;
+extern void sd_read_benchmark(void);
+
 /* USER CODE END 0 */
 
 /**
@@ -565,13 +577,24 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART1_UART_Init();
   MX_FMC_Init();
   MX_LTDC_Init();
   MX_I2C4_Init();
   MX_TIM12_Init();
   MX_QUADSPI_Init();
+  MX_SDMMC2_SD_Init();
   /* USER CODE BEGIN 2 */
+  //print_sd_info();
+  //print_sd_card_info();
+  //HAL_SD_CardCSDTypeDef myCSD;
+  //HAL_SD_CardCIDTypeDef myCID;
+  //HAL_SD_GetCardCSD(&hsd2, &myCSD);
+  print_sd_card_details();
+
+
+  //HAL_SD_GetCardCID(&hsd2,&myCID);
   //uint32_t qspi_id = BspQspiBoot_ReadID();
   //printf("qspi id= %08x\n",qspi_id);
 
@@ -582,6 +605,9 @@ int main(void)
 
 	sdram_init();
 	printf("SDRAM inited\n");
+
+	sd_read_benchmark();
+
 	printf("Starting memtest\n");
 	{
 		volatile uint32_t *p = (uint32_t*) 0xC0000000;
@@ -626,6 +652,13 @@ int main(void)
 		HAL_UART_Transmit(&huart1, ".", 1, 100);
 		HAL_Delay(500);
 		HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
+
+		if(retest){
+			retest = 0;
+			HAL_SD_Init(&hsd2);
+			 print_sd_card_details();
+			 HAL_SD_DeInit(&hsd2);
+		}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -662,7 +695,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLM = 5;
   RCC_OscInitStruct.PLL.PLLN = 160;
   RCC_OscInitStruct.PLL.PLLP = 2;
-  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLQ = 32;
   RCC_OscInitStruct.PLL.PLLR = 2;
   RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_2;
   RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
@@ -837,6 +870,37 @@ static void MX_QUADSPI_Init(void)
 }
 
 /**
+  * @brief SDMMC2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SDMMC2_SD_Init(void)
+{
+
+  /* USER CODE BEGIN SDMMC2_Init 0 */
+
+  /* USER CODE END SDMMC2_Init 0 */
+
+  /* USER CODE BEGIN SDMMC2_Init 1 */
+
+  /* USER CODE END SDMMC2_Init 1 */
+  hsd2.Instance = SDMMC2;
+  hsd2.Init.ClockEdge = SDMMC_CLOCK_EDGE_RISING;
+  hsd2.Init.ClockPowerSave = SDMMC_CLOCK_POWER_SAVE_DISABLE;
+  hsd2.Init.BusWide = SDMMC_BUS_WIDE_4B;
+  hsd2.Init.HardwareFlowControl = SDMMC_HARDWARE_FLOW_CONTROL_DISABLE;
+  hsd2.Init.ClockDiv = 0;
+  if (HAL_SD_Init(&hsd2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SDMMC2_Init 2 */
+
+  /* USER CODE END SDMMC2_Init 2 */
+
+}
+
+/**
   * @brief TIM12 Initialization Function
   * @param None
   * @retval None
@@ -911,7 +975,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 1000000;
+  huart1.Init.BaudRate = 2000000;
   huart1.Init.WordLength = UART_WORDLENGTH_9B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_EVEN;
@@ -933,13 +997,29 @@ static void MX_USART1_UART_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_UARTEx_DisableFifoMode(&huart1) != HAL_OK)
+  if (HAL_UARTEx_EnableFifoMode(&huart1) != HAL_OK)
   {
     Error_Handler();
   }
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
 
 }
 
@@ -1020,7 +1100,13 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GT_RST_GPIO_Port, GT_RST_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOH, GT_RST_Pin|dbg4_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(dbg3_GPIO_Port, dbg3_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, dbg1_Pin|dbg2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : lcd_rst_Pin */
   GPIO_InitStruct.Pin = lcd_rst_Pin;
@@ -1042,12 +1128,26 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(led_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : GT_RST_Pin */
-  GPIO_InitStruct.Pin = GT_RST_Pin;
+  /*Configure GPIO pins : GT_RST_Pin dbg4_Pin */
+  GPIO_InitStruct.Pin = GT_RST_Pin|dbg4_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GT_RST_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : dbg3_Pin */
+  GPIO_InitStruct.Pin = dbg3_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(dbg3_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : dbg1_Pin dbg2_Pin */
+  GPIO_InitStruct.Pin = dbg1_Pin|dbg2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
