@@ -60,15 +60,26 @@ static inline uint32_t read32(volatile uint32_t *ptr, uint32_t count)
 }
 
 uint32_t sdbuff[10* 512/4];
+__attribute__((aligned(4))) uint32_t sram_buf[512/4];
+
 void sd_read_benchmark(void){
 		MemBenchmarkResult res = {0};
-		uint32_t size_bytes  = 512*128;
+		uint32_t size_bytes  = 512*2048;
 		static uint32_t *sdram = (uint32_t*)0xC0000000;
 
 		memset(sdram,0,32*1024*1024);
 	 	uint32_t start = DWT_GetCycles();
 
-	 	HAL_SD_ReadBlocks(&hsd2, sdram, 0, 128, 10000);
+	 	for(int c=0;c<2048;c++){
+	 	HAL_SD_ReadBlocks(&hsd2, sram_buf, 2048+c, 1, 10000);
+	 	memcpy(sdram+c*512/4,sram_buf,512);
+	 	}
+
+	 	//dump memory <filename> <start-address> <end-address>
+	 	//dump memory sdram2.bin 0xC0000000 0xC0000000 + 0x100000
+	 	//dump memory sdram7_sram.bin 0xC0000000 0xC0000000 + 0x100000
+
+
 
 
 	    uint32_t end = DWT_GetCycles();
