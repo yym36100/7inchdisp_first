@@ -67,10 +67,12 @@ void Error_Handler(void);
 #define led_GPIO_Port GPIOC
 #define GT_RST_Pin GPIO_PIN_7
 #define GT_RST_GPIO_Port GPIOH
-#define dbg4_Pin GPIO_PIN_14
-#define dbg4_GPIO_Port GPIOH
-#define dbg3_Pin GPIO_PIN_3
-#define dbg3_GPIO_Port GPIOI
+#define cam_pwdn_Pin GPIO_PIN_14
+#define cam_pwdn_GPIO_Port GPIOH
+#define cam_reset_Pin GPIO_PIN_3
+#define cam_reset_GPIO_Port GPIOI
+#define cam_xclock_Pin GPIO_PIN_15
+#define cam_xclock_GPIO_Port GPIOA
 #define dbg1_Pin GPIO_PIN_8
 #define dbg1_GPIO_Port GPIOB
 #define dbg2_Pin GPIO_PIN_9

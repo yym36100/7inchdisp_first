@@ -41,12 +41,18 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+DCMI_HandleTypeDef hdcmi;
+DMA_HandleTypeDef hdma_dcmi;
+
+DMA2D_HandleTypeDef hdma2d;
+
 I2C_HandleTypeDef hi2c4;
 
 LTDC_HandleTypeDef hltdc;
 
 QSPI_HandleTypeDef hqspi;
 
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim12;
 
 UART_HandleTypeDef huart1;
@@ -55,6 +61,9 @@ DMA_HandleTypeDef hdma_usart1_rx;
 SDRAM_HandleTypeDef hsdram1;
 
 /* USER CODE BEGIN PV */
+
+__attribute__((section(".sdram"))) uint32_t volatile framebuffer[1024*600*2/4]; // Example RGB565
+__attribute__((section(".sdram"))) uint32_t volatile cambuffer[640*480*2/4]; // Example RGB565
 
 /* USER CODE END PV */
 
@@ -69,6 +78,9 @@ static void MX_LTDC_Init(void);
 static void MX_I2C4_Init(void);
 static void MX_TIM12_Init(void);
 static void MX_QUADSPI_Init(void);
+static void MX_DCMI_Init(void);
+static void MX_TIM2_Init(void);
+static void MX_DMA2D_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -532,6 +544,29 @@ extern void print_sd_card_details(void);
 volatile int retest = 0;
 extern void sd_read_benchmark(void);
 
+void HAL_DCMI_FrameEventCallback(DCMI_HandleTypeDef *hdcmi)
+{
+    /* Frame complete */
+    //frame_ready_flag = 1;   // set a flag
+
+    HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
+    ITM->PORT[0].u8 = 'C';
+}
+
+void myDMA2D_Init(void)
+{
+    hdma2d.Instance = DMA2D;
+    hdma2d.Init.Mode = DMA2D_M2M;             // Memory-to-memory
+    hdma2d.Init.ColorMode = DMA2D_RGB565;     // Destination format
+    hdma2d.Init.OutputOffset = 1024 - 640;    // framebuffer width - camera width
+    hdma2d.LayerCfg[1].InputOffset = 0;       // No input offset
+    hdma2d.LayerCfg[1].InputColorMode = DMA2D_INPUT_RGB565;
+    hdma2d.LayerCfg[1].AlphaMode = DMA2D_NO_MODIF_ALPHA;
+    hdma2d.LayerCfg[1].InputAlpha = 0xFF;
+
+    if (HAL_DMA2D_Init(&hdma2d) != HAL_OK) Error_Handler();
+    if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK) Error_Handler();
+}
 /* USER CODE END 0 */
 
 /**
@@ -581,6 +616,9 @@ int main(void)
   MX_I2C4_Init();
   MX_TIM12_Init();
   MX_QUADSPI_Init();
+  MX_DCMI_Init();
+  MX_TIM2_Init();
+  MX_DMA2D_Init();
   /* USER CODE BEGIN 2 */
   //print_sd_info();
   //print_sd_card_info();
@@ -630,6 +668,15 @@ int main(void)
 
 	HAL_TIM_PWM_Start(&htim12, TIM_CHANNEL_1);
 	__HAL_TIM_SET_COMPARE(&htim12, TIM_CHANNEL_1, 833);
+
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+	HAL_Delay(10);
+	HAL_GPIO_WritePin(cam_reset_GPIO_Port,cam_reset_Pin, 1);
+
+	myDMA2D_Init();
+
+	 HAL_DCMI_Start_DMA(&hdcmi,DCMI_MODE_CONTINUOUS,(uint32_t)cambuffer,640 * 480 *2/ 4);
+
 	//memset(0xc0000000,0xf0,1024*600*1);
 	{
 		uint32_t *src_sdram = (uint16_t*) 0xC0000000;
@@ -640,14 +687,27 @@ int main(void)
 	SCB_CleanDCache_by_Addr((uint32_t*) 0xc0000000, 1024 * 600 * 2);
 	//restore u:\work\2025\7inchdispcolor\ws\7inchdisp_first\tools\testimg1.bin binary 0xC0000000
 
+	ITM->TCR = ITM_TCR_ITMENA_Msk | ITM_TCR_SYNCENA_Msk;
+	ITM->TER = 3; // enable port 0
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	while (1) {
 		HAL_UART_Transmit(&huart1, ".", 1, 100);
-		HAL_Delay(500);
-		HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
+		HAL_Delay(33);
+		//HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
+		ITM->PORT[1].u8 = 'M';
+
+
+		 HAL_DMA2D_Start(&hdma2d,
+		                    (uint32_t)cambuffer,      // source
+		                    (uint32_t)framebuffer,    // destination
+		                    640,                       // width in pixels
+		                    480);                      // height in pixels
+		    HAL_DMA2D_PollForTransfer(&hdma2d, HAL_MAX_DELAY);
+
 
 
     /* USER CODE END WHILE */
@@ -713,6 +773,83 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief DCMI Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DCMI_Init(void)
+{
+
+  /* USER CODE BEGIN DCMI_Init 0 */
+
+  /* USER CODE END DCMI_Init 0 */
+
+  /* USER CODE BEGIN DCMI_Init 1 */
+
+  /* USER CODE END DCMI_Init 1 */
+  hdcmi.Instance = DCMI;
+  hdcmi.Init.SynchroMode = DCMI_SYNCHRO_HARDWARE;
+  hdcmi.Init.PCKPolarity = DCMI_PCKPOLARITY_RISING;
+  hdcmi.Init.VSPolarity = DCMI_VSPOLARITY_HIGH;
+  hdcmi.Init.HSPolarity = DCMI_HSPOLARITY_LOW;
+  hdcmi.Init.CaptureRate = DCMI_CR_ALL_FRAME;
+  hdcmi.Init.ExtendedDataMode = DCMI_EXTEND_DATA_8B;
+  hdcmi.Init.JPEGMode = DCMI_JPEG_DISABLE;
+  hdcmi.Init.ByteSelectMode = DCMI_BSM_ALL;
+  hdcmi.Init.ByteSelectStart = DCMI_OEBS_ODD;
+  hdcmi.Init.LineSelectMode = DCMI_LSM_ALL;
+  hdcmi.Init.LineSelectStart = DCMI_OELS_ODD;
+  if (HAL_DCMI_Init(&hdcmi) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DCMI_Init 2 */
+
+  /* USER CODE END DCMI_Init 2 */
+
+}
+
+/**
+  * @brief DMA2D Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DMA2D_Init(void)
+{
+
+  /* USER CODE BEGIN DMA2D_Init 0 */
+
+  /* USER CODE END DMA2D_Init 0 */
+
+  /* USER CODE BEGIN DMA2D_Init 1 */
+
+  /* USER CODE END DMA2D_Init 1 */
+  hdma2d.Instance = DMA2D;
+  hdma2d.Init.Mode = DMA2D_M2M;
+  hdma2d.Init.ColorMode = DMA2D_OUTPUT_RGB565;
+  hdma2d.Init.OutputOffset = 0;
+  hdma2d.LayerCfg[1].InputOffset = 0;
+  hdma2d.LayerCfg[1].InputColorMode = DMA2D_INPUT_RGB565;
+  hdma2d.LayerCfg[1].AlphaMode = DMA2D_NO_MODIF_ALPHA;
+  hdma2d.LayerCfg[1].InputAlpha = 0;
+  hdma2d.LayerCfg[1].AlphaInverted = DMA2D_REGULAR_ALPHA;
+  hdma2d.LayerCfg[1].RedBlueSwap = DMA2D_RB_REGULAR;
+  hdma2d.LayerCfg[1].ChromaSubSampling = DMA2D_NO_CSS;
+  if (HAL_DMA2D_Init(&hdma2d) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DMA2D_Init 2 */
+
+  /* USER CODE END DMA2D_Init 2 */
+
 }
 
 /**
@@ -861,6 +998,55 @@ static void MX_QUADSPI_Init(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 0;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 7;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 4;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+  HAL_TIM_MspPostInit(&htim2);
+
+}
+
+/**
   * @brief TIM12 Initialization Function
   * @param None
   * @retval None
@@ -980,6 +1166,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
+  /* DMA1_Stream1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);
 
 }
 
@@ -1048,10 +1237,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOI_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(lcd_rst_GPIO_Port, lcd_rst_Pin, GPIO_PIN_RESET);
@@ -1060,10 +1249,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOH, GT_RST_Pin|dbg4_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOH, GT_RST_Pin|cam_pwdn_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(dbg3_GPIO_Port, dbg3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(cam_reset_GPIO_Port, cam_reset_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, dbg1_Pin|dbg2_Pin, GPIO_PIN_RESET);
@@ -1088,19 +1277,19 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(led_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : GT_RST_Pin dbg4_Pin */
-  GPIO_InitStruct.Pin = GT_RST_Pin|dbg4_Pin;
+  /*Configure GPIO pins : GT_RST_Pin cam_pwdn_Pin */
+  GPIO_InitStruct.Pin = GT_RST_Pin|cam_pwdn_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : dbg3_Pin */
-  GPIO_InitStruct.Pin = dbg3_Pin;
+  /*Configure GPIO pin : cam_reset_Pin */
+  GPIO_InitStruct.Pin = cam_reset_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(dbg3_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(cam_reset_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : dbg1_Pin dbg2_Pin */
   GPIO_InitStruct.Pin = dbg1_Pin|dbg2_Pin;
