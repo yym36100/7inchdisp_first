@@ -74,7 +74,7 @@ void decode_cid_full(uint32_t cid[4]) {
     printf("CRC: %u\n", (cid[3]>>1)&0x7F);
 }
 
-extern SD_HandleTypeDef hsd2;
+//extern SD_HandleTypeDef hsd2;
 
 
 

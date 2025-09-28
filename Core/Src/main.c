@@ -47,8 +47,6 @@ LTDC_HandleTypeDef hltdc;
 
 QSPI_HandleTypeDef hqspi;
 
-SD_HandleTypeDef hsd2;
-
 TIM_HandleTypeDef htim12;
 
 UART_HandleTypeDef huart1;
@@ -71,7 +69,6 @@ static void MX_LTDC_Init(void);
 static void MX_I2C4_Init(void);
 static void MX_TIM12_Init(void);
 static void MX_QUADSPI_Init(void);
-static void MX_SDMMC2_SD_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -584,29 +581,28 @@ int main(void)
   MX_I2C4_Init();
   MX_TIM12_Init();
   MX_QUADSPI_Init();
-  MX_SDMMC2_SD_Init();
   /* USER CODE BEGIN 2 */
   //print_sd_info();
   //print_sd_card_info();
   //HAL_SD_CardCSDTypeDef myCSD;
   //HAL_SD_CardCIDTypeDef myCID;
   //HAL_SD_GetCardCSD(&hsd2, &myCSD);
-  print_sd_card_details();
+  //print_sd_card_details();
 
 
   //HAL_SD_GetCardCID(&hsd2,&myCID);
   //uint32_t qspi_id = BspQspiBoot_ReadID();
   //printf("qspi id= %08x\n",qspi_id);
 
-  //BspQspiBoot_MemMapped();
   BspQspiBoot_MemMapped();
+  //BspQspiBoot_MemMapped();
 	//HAL_UART_Transmit(&huart1, "Start\n", 6, 100);
 	printf("Start\n");
 
 	sdram_init();
 	printf("SDRAM inited\n");
 
-	sd_read_benchmark();
+//	sd_read_benchmark();
 
 	printf("Starting memtest\n");
 	{
@@ -653,12 +649,7 @@ int main(void)
 		HAL_Delay(500);
 		HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
 
-		if(retest){
-			retest = 0;
-			HAL_SD_Init(&hsd2);
-			 print_sd_card_details();
-			 HAL_SD_DeInit(&hsd2);
-		}
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -866,37 +857,6 @@ static void MX_QUADSPI_Init(void)
   /* USER CODE BEGIN QUADSPI_Init 2 */
 
   /* USER CODE END QUADSPI_Init 2 */
-
-}
-
-/**
-  * @brief SDMMC2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_SDMMC2_SD_Init(void)
-{
-
-  /* USER CODE BEGIN SDMMC2_Init 0 */
-
-  /* USER CODE END SDMMC2_Init 0 */
-
-  /* USER CODE BEGIN SDMMC2_Init 1 */
-
-  /* USER CODE END SDMMC2_Init 1 */
-  hsd2.Instance = SDMMC2;
-  hsd2.Init.ClockEdge = SDMMC_CLOCK_EDGE_RISING;
-  hsd2.Init.ClockPowerSave = SDMMC_CLOCK_POWER_SAVE_DISABLE;
-  hsd2.Init.BusWide = SDMMC_BUS_WIDE_4B;
-  hsd2.Init.HardwareFlowControl = SDMMC_HARDWARE_FLOW_CONTROL_DISABLE;
-  hsd2.Init.ClockDiv = 4;
-  if (HAL_SD_Init(&hsd2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN SDMMC2_Init 2 */
-
-  /* USER CODE END SDMMC2_Init 2 */
 
 }
 

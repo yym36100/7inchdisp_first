@@ -9,7 +9,7 @@ uint32_t internalrambuff[32*1024/4];
 
 uint32_t dtcram[32*1024/4];
 
-extern SD_HandleTypeDef hsd2;
+//extern SD_HandleTypeDef hsd2;
 
 #include "stm32h7xx_hal.h"
 #include <stdint.h>
@@ -58,7 +58,7 @@ static inline uint32_t read32(volatile uint32_t *ptr, uint32_t count)
     }
     return sum;
 }
-
+#if 0
 uint32_t sdbuff[10* 512/4];
 __attribute__((aligned(4))) uint32_t sram_buf[512/4];
 
@@ -89,7 +89,7 @@ void sd_read_benchmark(void){
 
 	    printf("SD read: %.1f MB/s (size = %d),\n", res.read_MBps,size_bytes);
 }
-
+#endif
 // --- Generic memory benchmark ---
 MemBenchmarkResult benchmark_memory32(void *base, uint32_t size_bytes)
 {
