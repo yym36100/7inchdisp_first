@@ -291,14 +291,14 @@ int OV7670_Config(void)
 	{
 		return ov_write_reg_result;
 	}
-
+#if 0
 	uint8_t ov_com3 = 0x04; // REG_COM3 enable scaling
 	ov_write_reg_result = OV7670_WriteReg( REG_COM3, &ov_com3);
 	if (ov_write_reg_result != OV7670_OK)
 	{
 		return ov_write_reg_result;
 	}
-
+#endif
 	ov_write_reg_result = OV7670_WriteRegList( vga_ov7670);
 	if (ov_write_reg_result != OV7670_OK)
 	{

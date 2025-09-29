@@ -675,6 +675,7 @@ int main(void)
 	myDMA2D_Init();
 
 	Camera_Init_Device(&hi2c4, FRAMESIZE_VGA);
+	OV7670_Config();
 	OV7670_ReadRegList(camera_regs);
 
 	HAL_DCMI_Start_DMA(&hdcmi, DCMI_MODE_CONTINUOUS, (uint32_t) cambuffer,
