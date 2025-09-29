@@ -56,6 +56,7 @@
 
 /* External variables --------------------------------------------------------*/
 extern DMA_HandleTypeDef hdma_dcmi;
+extern DCMI_HandleTypeDef hdcmi;
 extern QSPI_HandleTypeDef hqspi;
 extern DMA_HandleTypeDef hdma_usart1_rx;
 /* USER CODE BEGIN EV */
@@ -226,6 +227,20 @@ void DMA1_Stream1_IRQHandler(void)
   /* USER CODE BEGIN DMA1_Stream1_IRQn 1 */
 
   /* USER CODE END DMA1_Stream1_IRQn 1 */
+}
+
+/**
+  * @brief This function handles DCMI global interrupt.
+  */
+void DCMI_IRQHandler(void)
+{
+  /* USER CODE BEGIN DCMI_IRQn 0 */
+
+  /* USER CODE END DCMI_IRQn 0 */
+  HAL_DCMI_IRQHandler(&hdcmi);
+  /* USER CODE BEGIN DCMI_IRQn 1 */
+
+  /* USER CODE END DCMI_IRQn 1 */
 }
 
 /**

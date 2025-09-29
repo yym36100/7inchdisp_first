@@ -22,6 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include "camera.h"
+#include "ov7670.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,8 +64,11 @@ SDRAM_HandleTypeDef hsdram1;
 
 /* USER CODE BEGIN PV */
 
-__attribute__((section(".sdram"))) uint32_t volatile framebuffer[1024*600*2/4]; // Example RGB565
-__attribute__((section(".sdram"))) uint32_t volatile cambuffer[640*480*2/4]; // Example RGB565
+__attribute__((section(".sdramb0")))  uint32_t volatile framebuffer[1024 * 600 * 2
+		/ 4]; // Example RGB565
+__attribute__((section(".sdramb1")))  uint32_t volatile cambuffer[640 * 480 * 2 / 4]; // Example RGB565
+
+uint8_t volatile camera_regs[0xc9 + 1];
 
 /* USER CODE END PV */
 
@@ -300,7 +305,7 @@ void SDRAM_FullTest(void) {
 			printf("Pattern %d passed\n", p);
 		else
 			printf("Pattern %d failed at address 0x%08X\n", p,
-					SDRAM_BASE_ADDR + res * 4);
+			SDRAM_BASE_ADDR + res * 4);
 	}
 }
 
@@ -438,105 +443,97 @@ extern void run_dma_benchmarks(void);
 #define QSPI_FLASH_END_ADDR       (1<<QSPI_FLASH_SIZE)
 #define QSPI_FLASH_BYTE_SIZE      (16*1024*1024)
 
-typedef enum
-{
-  BQB_Cmd_ReadID = 0x9F,
-  BQB_Cmd_ReadStatus1 = 0x05,
-  BQB_Cmd_WriteEnable = 0x06,
-  BQB_Cmd_SectorErase = 0x20,
-  BQB_Cmd_ChipErase = 0xC7,
-  BQB_Cmd_PageProgram_Quad = 0x32,
-  BQB_Cmd_FastRead_Quad = 0xEB,
-}BQB_Cmd_E;
+typedef enum {
+	BQB_Cmd_ReadID = 0x9F,
+	BQB_Cmd_ReadStatus1 = 0x05,
+	BQB_Cmd_WriteEnable = 0x06,
+	BQB_Cmd_SectorErase = 0x20,
+	BQB_Cmd_ChipErase = 0xC7,
+	BQB_Cmd_PageProgram_Quad = 0x32,
+	BQB_Cmd_FastRead_Quad = 0xEB,
+} BQB_Cmd_E;
 
+int BspQspiBoot_Init(void) {
+	uint32_t i;
+	char *p;
 
-int BspQspiBoot_Init(void)
-{
-  uint32_t i;
-  char *p;
+	/* ½«¾ä±úÊÖ¶¯ÇåÁã£¬·ÀÖ¹×÷ÎªÈ«¾Ö±äÁ¿µÄÊ±ºòÃ»ÓÐÇåÁã */
+	p = (char*) &hqspi;
+	for (i = 0; i < sizeof(QSPI_HandleTypeDef); i++) {
+		*p++ = 0;
+	}
 
-  /* ½«¾ä±úÊÖ¶¯ÇåÁã£¬·ÀÖ¹×÷ÎªÈ«¾Ö±äÁ¿µÄÊ±ºòÃ»ÓÐÇåÁã */
-  p = (char *)&hqspi;
-  for (i = 0; i < sizeof(QSPI_HandleTypeDef); i++)
-  {
-    *p++ = 0;
-  }
+	/* ¸´Î»QSPI */
+	hqspi.Instance = QUADSPI;
 
-  /* ¸´Î»QSPI */
-  hqspi.Instance = QUADSPI;
+	if (HAL_QSPI_DeInit(&hqspi) != HAL_OK) {
+		return 1;
+	}
 
-  if (HAL_QSPI_DeInit(&hqspi) != HAL_OK)
-  {
-    return 1;
-  }
+	/* ÉèÖÃÊ±ÖÓËÙ¶È£¬QSPI clock = 200MHz / (ClockPrescaler+1) = 100MHz */
+	hqspi.Init.ClockPrescaler = 1;
 
-  /* ÉèÖÃÊ±ÖÓËÙ¶È£¬QSPI clock = 200MHz / (ClockPrescaler+1) = 100MHz */
-  hqspi.Init.ClockPrescaler = 1;
+	/* ÉèÖÃFIFO·§Öµ£¬·¶Î§1 - 32 */
+	hqspi.Init.FifoThreshold = 1;
 
-  /* ÉèÖÃFIFO·§Öµ£¬·¶Î§1 - 32 */
-  hqspi.Init.FifoThreshold = 1;
+	/*
+	 QUADSPIÔÚFLASHÇý¶¯ÐÅºÅºó¹ý°ë¸öCLKÖÜÆÚ²Å¶ÔFLASHÇý¶¯µÄÊý¾Ý²ÉÑù¡£
+	 ÔÚÍâ²¿ÐÅºÅÑÓ³ÙÊ±£¬ÕâÓÐÀûÓÚÍÆ³ÙÊý¾Ý²ÉÑù¡£
+	 */
+	hqspi.Init.SampleShifting = QSPI_SAMPLE_SHIFTING_HALFCYCLE;
 
-  /*
-      QUADSPIÔÚFLASHÇý¶¯ÐÅºÅºó¹ý°ë¸öCLKÖÜÆÚ²Å¶ÔFLASHÇý¶¯µÄÊý¾Ý²ÉÑù¡£
-      ÔÚÍâ²¿ÐÅºÅÑÓ³ÙÊ±£¬ÕâÓÐÀûÓÚÍÆ³ÙÊý¾Ý²ÉÑù¡£
-  */
-  hqspi.Init.SampleShifting = QSPI_SAMPLE_SHIFTING_HALFCYCLE;
+	/* Flash´óÐ¡ÊÇ2^(FlashSize + 1) = 2^23 = 8MB */
+	hqspi.Init.FlashSize = QSPI_FLASH_SIZE; //QSPI_FLASH_SIZE - 1; 2020-03-04, ÐèÒªÀ©´óÒ»±¶£¬·ñÔòÄÚ´æÓ³Éä·½Î»×îºó1¸öµØÖ·Ê±£¬»áÒì³£
 
-  /* Flash´óÐ¡ÊÇ2^(FlashSize + 1) = 2^23 = 8MB */
-  hqspi.Init.FlashSize = QSPI_FLASH_SIZE; //QSPI_FLASH_SIZE - 1; 2020-03-04, ÐèÒªÀ©´óÒ»±¶£¬·ñÔòÄÚ´æÓ³Éä·½Î»×îºó1¸öµØÖ·Ê±£¬»áÒì³£
+	/* ÃüÁîÖ®¼äµÄCSÆ¬Ñ¡ÖÁÉÙ±£³Ö1¸öÊ±ÖÓÖÜÆÚµÄ¸ßµçÆ½ */
+	hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_2_CYCLE; //QSPI_CS_HIGH_TIME_5_CYCLE
 
-  /* ÃüÁîÖ®¼äµÄCSÆ¬Ñ¡ÖÁÉÙ±£³Ö1¸öÊ±ÖÓÖÜÆÚµÄ¸ßµçÆ½ */
-  hqspi.Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_2_CYCLE;//QSPI_CS_HIGH_TIME_5_CYCLE
+	/*
+	 MODE0: ±íÊ¾Æ¬Ñ¡ÐÅºÅ¿ÕÏÐÆÚ¼ä£¬CLKÊ±ÖÓÐÅºÅÊÇµÍµçÆ½
+	 MODE3: ±íÊ¾Æ¬Ñ¡ÐÅºÅ¿ÕÏÐÆÚ¼ä£¬CLKÊ±ÖÓÐÅºÅÊÇ¸ßµçÆ½
+	 */
+	hqspi.Init.ClockMode = QSPI_CLOCK_MODE_0;
 
-  /*
-     MODE0: ±íÊ¾Æ¬Ñ¡ÐÅºÅ¿ÕÏÐÆÚ¼ä£¬CLKÊ±ÖÓÐÅºÅÊÇµÍµçÆ½
-     MODE3: ±íÊ¾Æ¬Ñ¡ÐÅºÅ¿ÕÏÐÆÚ¼ä£¬CLKÊ±ÖÓÐÅºÅÊÇ¸ßµçÆ½
-  */
-  hqspi.Init.ClockMode = QSPI_CLOCK_MODE_0;
+	/* QSPIÓÐÁ½¸öBANK£¬ÕâÀïÊ¹ÓÃµÄBANK1 */
+	hqspi.Init.FlashID = QSPI_FLASH_ID_1;
 
-  /* QSPIÓÐÁ½¸öBANK£¬ÕâÀïÊ¹ÓÃµÄBANK1 */
-  hqspi.Init.FlashID = QSPI_FLASH_ID_1;
+	/* Ê¹ÓÃÁËBANK1£¬ÕâÀïÊÇ½ûÖ¹Ë«BANK */
+	hqspi.Init.DualFlash = QSPI_DUALFLASH_DISABLE;
 
-  /* Ê¹ÓÃÁËBANK1£¬ÕâÀïÊÇ½ûÖ¹Ë«BANK */
-  hqspi.Init.DualFlash = QSPI_DUALFLASH_DISABLE;
+	/* ³õÊ¼»¯ÅäÖÃQSPI */
+	if (HAL_QSPI_Init(&hqspi) != HAL_OK) {
+		return 1;
+	}
 
-  /* ³õÊ¼»¯ÅäÖÃQSPI */
-  if (HAL_QSPI_Init(&hqspi) != HAL_OK)
-  {
-    return 1;
-  }
-
-  return 0;
+	return 0;
 }
 
-int BspQspiBoot_MemMapped(void)
-{
-  QSPI_CommandTypeDef s_command = {0};
-  QSPI_MemoryMappedTypeDef s_mem_mapped_cfg = {0};
+int BspQspiBoot_MemMapped(void) {
+	QSPI_CommandTypeDef s_command = { 0 };
+	QSPI_MemoryMappedTypeDef s_mem_mapped_cfg = { 0 };
 
-  s_command.InstructionMode          = QSPI_INSTRUCTION_1_LINE;     /* 1Ïß·½Ê½·¢ËÍÖ¸Áî */
-  s_command.AddressSize              = QSPI_ADDRESS_24_BITS;        /* 24Î»µØÖ· */
-  s_command.AlternateByteMode        = QSPI_ALTERNATE_BYTES_NONE;   /* ÎÞ½»Ìæ×Ö½Ú */
-  s_command.DdrMode                  = QSPI_DDR_MODE_DISABLE;       /* W25Q64JV²»Ö§³ÖDDR */
-  s_command.DdrHoldHalfCycle         = QSPI_DDR_HHC_ANALOG_DELAY;   /* DDRÄ£Ê½£¬Êý¾ÝÊä³öÑÓ³Ù */
-  s_command.SIOOMode                 = QSPI_SIOO_INST_EVERY_CMD;    /* Ã¿´Î´«Êä¶¼·¢Ö¸Áî */
+	s_command.InstructionMode = QSPI_INSTRUCTION_1_LINE; /* 1Ïß·½Ê½·¢ËÍÖ¸Áî */
+	s_command.AddressSize = QSPI_ADDRESS_24_BITS; /* 24Î»µØÖ· */
+	s_command.AlternateByteMode = QSPI_ALTERNATE_BYTES_NONE; /* ÎÞ½»Ìæ×Ö½Ú */
+	s_command.DdrMode = QSPI_DDR_MODE_DISABLE; /* W25Q64JV²»Ö§³ÖDDR */
+	s_command.DdrHoldHalfCycle = QSPI_DDR_HHC_ANALOG_DELAY; /* DDRÄ£Ê½£¬Êý¾ÝÊä³öÑÓ³Ù */
+	s_command.SIOOMode = QSPI_SIOO_INST_EVERY_CMD; /* Ã¿´Î´«Êä¶¼·¢Ö¸Áî */
 
-  s_command.Instruction              = BQB_Cmd_FastRead_Quad;       /* ¿ìËÙ¶ÁÈ¡ÃüÁî */
-  s_command.AddressMode              = QSPI_ADDRESS_4_LINES;        /* 4¸öµØÖ·Ïß */
-  s_command.DataMode                 = QSPI_DATA_4_LINES;           /* 4¸öÊý¾ÝÏß */
-  s_command.DummyCycles              = 6;                           /* ¿ÕÖÜÆÚ */
+	s_command.Instruction = BQB_Cmd_FastRead_Quad; /* ¿ìËÙ¶ÁÈ¡ÃüÁî */
+	s_command.AddressMode = QSPI_ADDRESS_4_LINES; /* 4¸öµØÖ·Ïß */
+	s_command.DataMode = QSPI_DATA_4_LINES; /* 4¸öÊý¾ÝÏß */
+	s_command.DummyCycles = 6; /* ¿ÕÖÜÆÚ */
 
-  s_mem_mapped_cfg.TimeOutActivation = QSPI_TIMEOUT_COUNTER_DISABLE;
-  s_mem_mapped_cfg.TimeOutPeriod = 0;
+	s_mem_mapped_cfg.TimeOutActivation = QSPI_TIMEOUT_COUNTER_DISABLE;
+	s_mem_mapped_cfg.TimeOutPeriod = 0;
 
-  if(HAL_QSPI_MemoryMapped(&hqspi, &s_command, &s_mem_mapped_cfg) != HAL_OK)
-  {
-    return 1;
-  }
+	if (HAL_QSPI_MemoryMapped(&hqspi, &s_command, &s_mem_mapped_cfg)
+			!= HAL_OK) {
+		return 1;
+	}
 
-  return 0;
+	return 0;
 }
-
 
 extern int print_sd_info(void);
 extern void print_sd_card_info(void);
@@ -544,29 +541,32 @@ extern void print_sd_card_details(void);
 volatile int retest = 0;
 extern void sd_read_benchmark(void);
 
-void HAL_DCMI_FrameEventCallback(DCMI_HandleTypeDef *hdcmi)
-{
-    /* Frame complete */
-    //frame_ready_flag = 1;   // set a flag
-
-    HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
-    ITM->PORT[0].u8 = 'C';
+void HAL_DCMI_FrameEventCallback(DCMI_HandleTypeDef *hdcmi) {
+	/* Frame complete */
+	//frame_ready_flag = 1;   // set a flag
+	HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
+	ITM->PORT[0].u8 = 'C';
 }
 
-void myDMA2D_Init(void)
-{
-    hdma2d.Instance = DMA2D;
-    hdma2d.Init.Mode = DMA2D_M2M;             // Memory-to-memory
-    hdma2d.Init.ColorMode = DMA2D_RGB565;     // Destination format
-    hdma2d.Init.OutputOffset = 1024 - 640;    // framebuffer width - camera width
-    hdma2d.LayerCfg[1].InputOffset = 0;       // No input offset
-    hdma2d.LayerCfg[1].InputColorMode = DMA2D_INPUT_RGB565;
-    hdma2d.LayerCfg[1].AlphaMode = DMA2D_NO_MODIF_ALPHA;
-    hdma2d.LayerCfg[1].InputAlpha = 0xFF;
+void myDMA2D_Init(void) {
+	hdma2d.Instance = DMA2D;
+	hdma2d.Init.Mode = DMA2D_M2M;             // Memory-to-memory
+	hdma2d.Init.ColorMode = DMA2D_RGB565;     // Destination format
+	hdma2d.Init.OutputOffset = 1024 - 640;   // framebuffer width - camera width
+	hdma2d.LayerCfg[1].InputOffset = 0;       // No input offset
+	hdma2d.LayerCfg[1].InputColorMode = DMA2D_INPUT_RGB565;
+	hdma2d.LayerCfg[1].AlphaMode = DMA2D_NO_MODIF_ALPHA;
+	hdma2d.LayerCfg[1].InputAlpha = 0xFF;
 
-    if (HAL_DMA2D_Init(&hdma2d) != HAL_OK) Error_Handler();
-    if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK) Error_Handler();
+	if (HAL_DMA2D_Init(&hdma2d) != HAL_OK)
+		Error_Handler();
+	if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK)
+		Error_Handler();
 }
+
+volatile int reReadRegs = 0;
+volatile int reWriteReg = 0;
+volatile uint8_t caddr = 0, cdata = 0;
 /* USER CODE END 0 */
 
 /**
@@ -604,7 +604,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-  //BspQspiBoot_Init();
+	//BspQspiBoot_Init();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -620,20 +620,18 @@ int main(void)
   MX_TIM2_Init();
   MX_DMA2D_Init();
   /* USER CODE BEGIN 2 */
-  //print_sd_info();
-  //print_sd_card_info();
-  //HAL_SD_CardCSDTypeDef myCSD;
-  //HAL_SD_CardCIDTypeDef myCID;
-  //HAL_SD_GetCardCSD(&hsd2, &myCSD);
-  //print_sd_card_details();
+	//print_sd_info();
+	//print_sd_card_info();
+	//HAL_SD_CardCSDTypeDef myCSD;
+	//HAL_SD_CardCIDTypeDef myCID;
+	//HAL_SD_GetCardCSD(&hsd2, &myCSD);
+	//print_sd_card_details();
 
-
-  //HAL_SD_GetCardCID(&hsd2,&myCID);
-  //uint32_t qspi_id = BspQspiBoot_ReadID();
-  //printf("qspi id= %08x\n",qspi_id);
-
-  BspQspiBoot_MemMapped();
-  //BspQspiBoot_MemMapped();
+	//HAL_SD_GetCardCID(&hsd2,&myCID);
+	//uint32_t qspi_id = BspQspiBoot_ReadID();
+	//printf("qspi id= %08x\n",qspi_id);
+	BspQspiBoot_MemMapped();
+	//BspQspiBoot_MemMapped();
 	//HAL_UART_Transmit(&huart1, "Start\n", 6, 100);
 	printf("Start\n");
 
@@ -671,11 +669,16 @@ int main(void)
 
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 	HAL_Delay(10);
-	HAL_GPIO_WritePin(cam_reset_GPIO_Port,cam_reset_Pin, 1);
+	HAL_GPIO_WritePin(cam_reset_GPIO_Port, cam_reset_Pin, 1);
+	HAL_Delay(20);
 
 	myDMA2D_Init();
 
-	 HAL_DCMI_Start_DMA(&hdcmi,DCMI_MODE_CONTINUOUS,(uint32_t)cambuffer,640 * 480 *2/ 4);
+	Camera_Init_Device(&hi2c4, FRAMESIZE_VGA);
+	OV7670_ReadRegList(camera_regs);
+
+	HAL_DCMI_Start_DMA(&hdcmi, DCMI_MODE_CONTINUOUS, (uint32_t) cambuffer,
+			640*480 * 2 / 4);
 
 	//memset(0xc0000000,0xf0,1024*600*1);
 	{
@@ -700,15 +703,22 @@ int main(void)
 		//HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
 		ITM->PORT[1].u8 = 'M';
 
+		HAL_DMA2D_Start(&hdma2d, (uint32_t) cambuffer,      // source
+				(uint32_t) framebuffer,    // destination
+				640,                       // width in pixels
+				480);                      // height in pixels
+		HAL_DMA2D_PollForTransfer(&hdma2d, HAL_MAX_DELAY);
 
-		 HAL_DMA2D_Start(&hdma2d,
-		                    (uint32_t)cambuffer,      // source
-		                    (uint32_t)framebuffer,    // destination
-		                    640,                       // width in pixels
-		                    480);                      // height in pixels
-		    HAL_DMA2D_PollForTransfer(&hdma2d, HAL_MAX_DELAY);
-
-
+		if (reReadRegs){
+			reReadRegs = 0;
+			int res = OV7670_ReadRegList(camera_regs);
+			printf("OV7670_ReadRegList = %d\n", res);
+		}
+		if (reWriteReg) {
+			reWriteReg = 0;
+			int res = OV7670_WriteReg(caddr, &cdata);
+			printf("OV7670_WriteReg = %d\n", res);
+		}
 
     /* USER CODE END WHILE */
 
@@ -868,7 +878,7 @@ static void MX_I2C4_Init(void)
 
   /* USER CODE END I2C4_Init 1 */
   hi2c4.Instance = I2C4;
-  hi2c4.Init.Timing = 0x10C0ECFF;
+  hi2c4.Init.Timing = 0x009034B6;
   hi2c4.Init.OwnAddress1 = 0;
   hi2c4.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c4.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -1016,7 +1026,7 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
+  htim2.Init.Prescaler = 1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 7;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;

@@ -48,6 +48,11 @@ MEMORY
   RAM_D2 (xrw)    : ORIGIN = 0x30000000, LENGTH = 288K
   RAM_D3 (xrw)    : ORIGIN = 0x38000000, LENGTH = 64K
   ITCMRAM (xrw)   : ORIGIN = 0x00000000, LENGTH = 64K
+  
+   SDRAM_B0 (xrw)   : ORIGIN = 0xC0000000, LENGTH = 8M 
+   SDRAM_B1 (xrw)   : ORIGIN = 0xC0800000, LENGTH = 8M
+   SDRAM_B2 (xrw)   : ORIGIN = 0xC1000000, LENGTH = 8M
+   SDRAM_B3 (xrw)   : ORIGIN = 0xC1800000, LENGTH = 8M
 }
 
 /* Define output sections */
@@ -170,6 +175,23 @@ SECTIONS
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >DTCMRAM
+  
+  /* Place SDRAM variables here */
+  .sdramb0 (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.sdramb0)
+    *(.sdramb0.*)
+    . = ALIGN(4);
+  } > SDRAM_B0
+  
+    .sdramb1 (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.sdramb1)
+    *(.sdramb1.*)
+    . = ALIGN(4);
+  } > SDRAM_B1
 
   /* Remove information from the standard libraries */
   /DISCARD/ :
