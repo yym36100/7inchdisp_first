@@ -546,6 +546,11 @@ void HAL_DCMI_FrameEventCallback(DCMI_HandleTypeDef *hdcmi) {
 	//frame_ready_flag = 1;   // set a flag
 	HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
 	ITM->PORT[0].u8 = 'C';
+
+	HAL_DMA2D_Start(&hdma2d, (uint32_t) cambuffer,      // source
+					(uint32_t) framebuffer,    // destination
+					640,                       // width in pixels
+					480);                      // height in pixels
 }
 
 void myDMA2D_Init(void) {
@@ -678,8 +683,7 @@ int main(void)
 	OV7670_Config();
 	OV7670_ReadRegList(camera_regs);
 
-	HAL_DCMI_Start_DMA(&hdcmi, DCMI_MODE_CONTINUOUS, (uint32_t) cambuffer,
-			640*480 * 2 / 4);
+	HAL_DCMI_Start_DMA(&hdcmi, DCMI_MODE_CONTINUOUS, (uint32_t) cambuffer,640*480 * 2 / 4);
 
 	//memset(0xc0000000,0xf0,1024*600*1);
 	{
@@ -703,12 +707,16 @@ int main(void)
 		HAL_Delay(33);
 		//HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
 		ITM->PORT[1].u8 = 'M';
-
+#if 0
 		HAL_DMA2D_Start(&hdma2d, (uint32_t) cambuffer,      // source
 				(uint32_t) framebuffer,    // destination
 				640,                       // width in pixels
 				480);                      // height in pixels
+#endif
 		HAL_DMA2D_PollForTransfer(&hdma2d, HAL_MAX_DELAY);
+		//dump memory camimg.bin 0xC012c000 0xC012c000 + 0x96000
+		//dump memory camimg2.bin 0xc0800000 0xc0800000 + 0x96000
+		//dump memory screen.bin 0xc0000000 0xc0000000 + 0x12c000
 
 		if (reReadRegs){
 			reReadRegs = 0;
